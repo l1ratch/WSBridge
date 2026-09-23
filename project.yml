@@ -73,7 +73,7 @@ targets:
         headerVisibility: private
     settings:
       base:
-        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Tunnel", "$(SRCROOT)/Tunnel/lwip/include"]
+        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Tunnel", "$(SRCROOT)/Tunnel/lwip/include", "$(SRCROOT)/Tunnel"]
         GCC_C_LANGUAGE_STANDARD: c11
         CLANG_ENABLE_MODULES: NO
 
