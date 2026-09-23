@@ -42,7 +42,6 @@ targets:
           - "lwip/**"
           - "lwipopts.h"
           - "lwip_bridge.h"
-          - "arch/**"
       - path: Tunnel/lwip
         headerVisibility: private
         excludes:
@@ -50,6 +49,8 @@ targets:
           - "**/makefsdata.c"
       - path: Tunnel/lwip_bridge.c
       - path: Tunnel/lwipopts.h
+        headerVisibility: private
+      - path: Tunnel/arch
         headerVisibility: private
     info:
       path: Tunnel/Info.plist
