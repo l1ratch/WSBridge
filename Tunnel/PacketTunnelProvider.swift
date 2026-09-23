@@ -81,7 +81,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                       dst, packetCount, byteCount)
             }
         }
+        // ponytail: пишем статистику в shared container каждые 100 пакетов
+        if packetCount % 100 == 0 {
+            writeStats()
+        }
         // ponytail: пакеты дропаются (фаза 1). В фазе 2 здесь появится lwIP → WS-сплайсинг.
+    }
+
+    private func writeStats() {
+        guard let defaults = UserDefaults(suiteName: "group.com.l1ratch.WSBridge") else { return }
+        defaults.set(Int(min(packetCount, UInt64(Int.max))), forKey: "pkts")
+        defaults.set(Int(min(byteCount, UInt64(Int.max))), forKey: "bytes")
+        defaults.set(Int(Date().timeIntervalSince(startedAt)), forKey: "uptime")
+        defaults.set(Array(seenHosts).sorted(), forKey: "hosts")
+        defaults.synchronize()
     }
 
     private static func ipv4Dst(_ packet: Data) -> String? {

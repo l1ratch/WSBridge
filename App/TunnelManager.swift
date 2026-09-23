@@ -28,29 +28,22 @@ final class TunnelManager: ObservableObject {
     }
 
     func fetchStats() async {
-        guard let session = manager?.connection as? NETunnelProviderSession else {
-            stats = "нет сессии: конфигурация не загружена"
+        // ponytail: sendProviderMessage не работает через GBox (IPC контекст не совпадает).
+        // Читаем статистику из shared App Group container напрямую.
+        guard let defaults = UserDefaults(suiteName: "group.com.l1ratch.WSBridge") else {
+            stats = "нет App Group container"
             return
         }
-        // sendProviderMessage: completion-оверлоад (async-версия резолвится в Void-вариант).
-        var ipcError: Error?
-        let data: Data? = await withCheckedContinuation { cont in
-            do {
-                try session.sendProviderMessage(Data("stats".utf8)) { cont.resume(returning: $0) }
-            } catch {
-                ipcError = error
-                cont.resume(returning: nil)
-            }
+        let pkts = defaults.integer(forKey: "pkts")
+        let bytes = defaults.integer(forKey: "bytes")
+        let uptime = defaults.integer(forKey: "uptime")
+        let hosts = defaults.stringArray(forKey: "hosts") ?? []
+        if pkts == 0 && bytes == 0 && uptime == 0 {
+            stats = "container пуст — расширение ещё не писало (туннель активен?)"
+        } else {
+            stats = "пакетов: \(pkts)\nбайт: \(bytes)\nuptime: \(uptime)с" +
+                (hosts.isEmpty ? "\nадреса: (нет)" : "\nадреса: " + hosts.joined(separator: ", "))
         }
-        if let ipcError {
-            stats = "ошибка IPC: \(ipcError.localizedDescription)"
-            return
-        }
-        guard let data else {
-            stats = "расширение вернуло nil (процесс жив?)"
-            return
-        }
-        stats = String(decoding: data, as: UTF8.self)
     }
 
     func toggle() async {

@@ -27,6 +27,7 @@ targets:
       path: App/WSBridge.entitlements
       properties:
         com.apple.developer.networking.vpn.api: [allow-vpn]
+        com.apple.security.application-groups: [group.com.l1ratch.WSBridge]
     dependencies:
       - target: WSBridgeTunnel
     settings:
@@ -50,6 +51,7 @@ targets:
       path: Tunnel/WSBridgeTunnel.entitlements
       properties:
         com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+        com.apple.security.application-groups: [group.com.l1ratch.WSBridge]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.l1ratch.WSBridge.tunnel
