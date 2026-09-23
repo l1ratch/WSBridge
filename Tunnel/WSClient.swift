@@ -1,17 +1,21 @@
 import Foundation
 
 /// WS-клиент к kws-гейтвею Telegram. Каждый MTProto-пакет — отдельный WS-фрейм.
+///
+/// ponytail: один общий URLSession на все соединения — расширение имеет лимит ~15MB,
+/// каждый URLSession жрёт несколько MB.
 final class WSClient {
-    private var task: URLSessionWebSocketTask?
-    private let session: URLSession
-    private var connected = false
-
-    init() {
+    private static let sharedSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 300
-        session = URLSession(configuration: config)
-    }
+        return URLSession(configuration: config)
+    }()
+
+    private var task: URLSessionWebSocketTask?
+    private var connected = false
+
+    init() {}
 
     /// Подключается к kws{dc}.web.telegram.org/apiws
     func connect(dc: Int, isTestDC: Bool, onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
@@ -21,7 +25,7 @@ final class WSClient {
             onClose()
             return
         }
-        task = session.webSocketTask(with: url)
+        task = Self.sharedSession.webSocketTask(with: url)
         task?.resume()
         connected = true
         receiveLoop(onMessage: onMessage, onClose: onClose)
