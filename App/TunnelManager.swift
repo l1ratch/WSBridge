@@ -29,19 +29,23 @@ final class TunnelManager: ObservableObject {
 
     func fetchStats() async {
         guard let session = manager?.connection as? NETunnelProviderSession else { return }
-        do {
-            let data = try await session.sendProviderMessage(Data("stats".utf8))
-            if let data,
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let pkts = json["pkts"] as? UInt64,
-               let bytes = json["bytes"] as? UInt64,
-               let hosts = json["hosts"] as? [String] {
-                stats = "пакетов: \(pkts)\nбайт: \(bytes)" +
-                    (hosts.isEmpty ? "" : "\nадреса: " + hosts.joined(separator: ", "))
+        // sendProviderMessage имеет два оверлоада (async и completion) — вызываем
+        // completion-вариант явно, чтобы компилятор не выбрал Void-версию.
+        let data: Data? = await withCheckedContinuation { cont in
+            do {
+                try session.sendProviderMessage(Data("stats".utf8)) { cont.resume(returning: $0) }
+            } catch {
+                NSLog("[WSBridge] stats error: %@", error.localizedDescription)
+                cont.resume(returning: nil)
             }
-        } catch {
-            NSLog("[WSBridge] stats error: %@", error.localizedDescription)
         }
+        guard let data,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let pkts = json["pkts"] as? UInt64,
+              let bytes = json["bytes"] as? UInt64,
+              let hosts = json["hosts"] as? [String] else { return }
+        stats = "пакетов: \(pkts)\nбайт: \(bytes)" +
+            (hosts.isEmpty ? "" : "\nадреса: " + hosts.joined(separator: ", "))
     }
 
     func toggle() async {
