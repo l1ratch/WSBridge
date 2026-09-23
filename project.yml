@@ -36,7 +36,13 @@ targets:
   WSBridgeTunnel:
     type: app-extension
     platform: iOS
-    sources: [Tunnel]
+    sources:
+      - path: Tunnel
+        excludes:
+          - "lwip/**"
+          - "lwipopts.h"
+          - "lwip_bridge.h"
+          - "lwip_bridge.c"
     info:
       path: Tunnel/Info.plist
       properties:
@@ -50,9 +56,24 @@ targets:
       path: Tunnel/WSBridgeTunnel.entitlements
       properties:
         com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+    dependencies:
+      - target: lwip
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.l1ratch.WSBridge.tunnel
+
+  lwip:
+    type: library.static
+    platform: iOS
+    sources:
+      - path: Tunnel/lwip
+      - path: Tunnel/lwip_bridge.c
+      - path: Tunnel/lwipopts.h
+    settings:
+      base:
+        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Tunnel", "$(SRCROOT)/Tunnel/lwip/include"]
+        GCC_C_LANGUAGE_STANDARD: c11
+        CLANG_ENABLE_MODULES: NO
 
 schemes:
   WSBridge:
