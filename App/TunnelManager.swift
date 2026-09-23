@@ -28,7 +28,10 @@ final class TunnelManager: ObservableObject {
     }
 
     func fetchStats() async {
-        guard let session = manager?.connection as? NETunnelProviderSession else { return }
+        guard let session = manager?.connection as? NETunnelProviderSession else {
+            stats = "нет сессии: конфигурация не загружена"
+            return
+        }
         // sendProviderMessage имеет два оверлоада (async и completion) — вызываем
         // completion-вариант явно, чтобы компилятор не выбрал Void-версию.
         let data: Data? = await withCheckedContinuation { cont in
@@ -39,13 +42,19 @@ final class TunnelManager: ObservableObject {
                 cont.resume(returning: nil)
             }
         }
-        guard let data,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let pkts = json["pkts"] as? UInt64,
-              let bytes = json["bytes"] as? UInt64,
-              let hosts = json["hosts"] as? [String] else { return }
+        guard let data else {
+            stats = "расширение не ответило (туннель активен?)"
+            return
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            stats = "непарсируемый ответ: \(String(decoding: data, as: UTF8.self))"
+            return
+        }
+        let pkts = json["pkts"] as? UInt64 ?? 0
+        let bytes = json["bytes"] as? UInt64 ?? 0
+        let hosts = json["hosts"] as? [String] ?? []
         stats = "пакетов: \(pkts)\nбайт: \(bytes)" +
-            (hosts.isEmpty ? "" : "\nадреса: " + hosts.joined(separator: ", "))
+            (hosts.isEmpty ? "\nадреса: (нет — трафик не дошёл)" : "\nадреса: " + hosts.joined(separator: ", "))
     }
 
     func toggle() async {
