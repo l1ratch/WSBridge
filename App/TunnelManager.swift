@@ -43,7 +43,7 @@ final class TunnelManager: ObservableObject {
                 { _, _, name, _, _ in
                     DispatchQueue.main.async {
                         guard let ref = tunnelManagerRef, let name else { return }
-                        let eventName = (name as String).replacingOccurrences(of: "com.l1ratch.WSBridge.", with: "")
+                        let eventName = (name as CFString as String).replacingOccurrences(of: "com.l1ratch.WSBridge.", with: "")
                         ref.lastEvent = eventName
                         ref.lastEventTime = Date()
                         if eventName == "pkts" {
