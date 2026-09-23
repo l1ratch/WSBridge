@@ -29,6 +29,6 @@ enum TelegramDCs {
     }
 
     static var includedRoutes6: [NEIPv6Route] {
-        ipv6.map { NEIPv6Route(destinationAddress: $0, prefixLength: 128) }
+        ipv6.map { NEIPv6Route(destinationAddress: $0, networkPrefixLength: 128) }
     }
 }
