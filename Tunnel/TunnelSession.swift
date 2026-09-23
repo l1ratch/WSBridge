@@ -23,8 +23,8 @@ final class TunnelSession {
         if !initParsed {
             initBuffer.append(data)
             if initBuffer.count >= InitParser.handshakeLen {
-                let init = initBuffer.prefix(InitParser.handshakeLen)
-                if let parsed = InitParser.parse(Data(init)) {
+                let initData = initBuffer.prefix(InitParser.handshakeLen)
+                if let parsed = InitParser.parse(Data(initData)) {
                     initParsed = true
                     startWS(parsed: parsed)
                     // Остаток после init

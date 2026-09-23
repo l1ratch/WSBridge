@@ -61,6 +61,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.l1ratch.WSBridge.tunnel
+        SWIFT_OBJC_BRIDGING_HEADER: Tunnel/WSBridgeTunnel-Bridging-Header.h
+        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Tunnel"]
 
   lwip:
     type: library.static
