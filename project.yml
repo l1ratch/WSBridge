@@ -42,7 +42,15 @@ targets:
           - "lwip/**"
           - "lwipopts.h"
           - "lwip_bridge.h"
-          - "lwip_bridge.c"
+          - "arch/**"
+      - path: Tunnel/lwip
+        headerVisibility: private
+        excludes:
+          - "**/makefsdata/**"
+          - "**/makefsdata.c"
+      - path: Tunnel/lwip_bridge.c
+      - path: Tunnel/lwipopts.h
+        headerVisibility: private
     info:
       path: Tunnel/Info.plist
       properties:
@@ -56,29 +64,11 @@ targets:
       path: Tunnel/WSBridgeTunnel.entitlements
       properties:
         com.apple.developer.networking.networkextension: [packet-tunnel-provider]
-    dependencies:
-      - target: lwip
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.l1ratch.WSBridge.tunnel
         SWIFT_OBJC_BRIDGING_HEADER: Tunnel/WSBridgeTunnel-Bridging-Header.h
-        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Tunnel"]
-
-  lwip:
-    type: library.static
-    platform: iOS
-    sources:
-      - path: Tunnel/lwip
-        headerVisibility: private
-        excludes:
-          - "**/makefsdata/**"
-          - "**/makefsdata.c"
-      - path: Tunnel/lwip_bridge.c
-      - path: Tunnel/lwipopts.h
-        headerVisibility: private
-    settings:
-      base:
-        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Tunnel", "$(SRCROOT)/Tunnel/lwip/include", "$(SRCROOT)/Tunnel"]
+        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Tunnel", "$(SRCROOT)/Tunnel/lwip/include"]
         GCC_C_LANGUAGE_STANDARD: c11
         CLANG_ENABLE_MODULES: NO
 
