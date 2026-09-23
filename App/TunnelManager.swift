@@ -3,6 +3,13 @@ import NetworkExtension
 
 // ponytail: глобальная ссылка для C-callback Darwin notifications
 private var tunnelManagerRef: TunnelManager?
+private let darwinEventNames = ["pkts", "accept", "init", "ws_sent", "ws_recv", "ws_close"]
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
 
 @MainActor
 final class TunnelManager: ObservableObject {
@@ -34,16 +41,16 @@ final class TunnelManager: ObservableObject {
     /// ponytail: Darwin notifications — единственный IPC без entitlements.
     /// Расширение постит события на каждом этапе; приложение слушает.
     private func observeDarwinNotifications() {
-        let events = ["pkts", "accept", "init", "ws_sent", "ws_recv", "ws_close"]
-        for event in events {
+        for (index, event) in darwinEventNames.enumerated() {
             let name = "com.l1ratch.WSBridge.\(event)" as CFString
-            let eventName = event
             CFNotificationCenterAddObserver(
                 CFNotificationCenterGetDarwinNotifyCenter(),
-                nil,
-                { _, _, _, _, _ in
+                UnsafeRawPointer(bitPattern: index + 1),
+                { _, observer, _, _, _ in
                     DispatchQueue.main.async {
                         guard let ref = tunnelManagerRef else { return }
+                        let idx = (Int(bitPattern: observer) ?? 1) - 1
+                        let eventName = darwinEventNames[safe: idx] ?? "unknown"
                         ref.lastEvent = eventName
                         ref.lastEventTime = Date()
                         if eventName == "pkts" {
