@@ -38,11 +38,26 @@ final class TunnelManager: ObservableObject {
         let bytes = defaults.integer(forKey: "bytes")
         let uptime = defaults.integer(forKey: "uptime")
         let hosts = defaults.stringArray(forKey: "hosts") ?? []
+
+        // Проверяем heartbeat-файл — расширение пишет его при старте туннеля
+        var heartbeatInfo = ""
+        if let container = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.com.l1ratch.WSBridge"
+        ) {
+            let url = container.appendingPathComponent("heartbeat.txt")
+            if let text = try? String(contentsOf: url, encoding: .utf8) {
+                heartbeatInfo = "\nheartbeat: \(text)"
+            } else {
+                heartbeatInfo = "\nheartbeat: файл не найден (расширение не писало)"
+            }
+        }
+
         if pkts == 0 && bytes == 0 && uptime == 0 {
-            stats = "container пуст — расширение ещё не писало (туннель активен?)"
+            stats = "container пуст — расширение ещё не писало (туннель активен?)" + heartbeatInfo
         } else {
             stats = "пакетов: \(pkts)\nбайт: \(bytes)\nuptime: \(uptime)с" +
-                (hosts.isEmpty ? "\nадреса: (нет)" : "\nадреса: " + hosts.joined(separator: ", "))
+                (hosts.isEmpty ? "\nадреса: (нет)" : "\nадреса: " + hosts.joined(separator: ", ")) +
+                heartbeatInfo
         }
     }
 

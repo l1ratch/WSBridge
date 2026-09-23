@@ -36,8 +36,27 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
             NSLog("[WSBridge] tunnel started")
+            self?.writeHeartbeat()
             self?.readLoop()
             completionHandler(nil)
+        }
+    }
+
+    /// ponytail: heartbeat при старте — если файл появляется, расширение пишет в контейнер.
+    private func writeHeartbeat() {
+        guard let container = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.com.l1ratch.WSBridge"
+        ) else {
+            NSLog("[WSBridge] heartbeat: no container URL (App Group entitlement missing?)")
+            return
+        }
+        let url = container.appendingPathComponent("heartbeat.txt")
+        let text = "started \(Date()) pkts=\(packetCount)"
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            NSLog("[WSBridge] heartbeat written to %@", url.path)
+        } catch {
+            NSLog("[WSBridge] heartbeat write failed: %@", error.localizedDescription)
         }
     }
 
