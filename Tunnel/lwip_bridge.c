@@ -6,6 +6,7 @@
 #include "lwip/pbuf.h"
 #include "lwip/timeouts.h"
 #include "lwip/ip4_addr.h"
+#include "lwip/priv/tcp_priv.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -92,7 +93,7 @@ static err_t netif_output(struct netif *netif, struct pbuf *p, const ip4_addr_t 
     (void)netif; (void)ipaddr;
     if (!g_output) return ERR_OK;
 
-    uint16_t total = pbuf_tot_len(p);
+    uint16_t total = p->tot_len;
     uint8_t *buf = (uint8_t *)malloc(total);
     if (!buf) return ERR_MEM;
     uint16_t copied = pbuf_copy_partial(p, buf, total, 0);
@@ -170,7 +171,7 @@ static err_t netif_output(struct netif *netif, struct pbuf *p, const ip4_addr_t 
     return ERR_OK;
 }
 
-static err_t netif_init_fn(struct netif *netif) {
+static err_t netif_init_cb(struct netif *netif) {
     netif->name[0] = 'w';
     netif->name[1] = 's';
     netif->output = netif_output;
@@ -227,7 +228,7 @@ static err_t tcp_recv_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t e
         return ERR_OK;
     }
     if (g_recv) {
-        uint16_t total = pbuf_tot_len(p);
+        uint16_t total = p->tot_len;
         uint8_t *buf = (uint8_t *)malloc(total);
         if (buf) {
             uint16_t copied = pbuf_copy_partial(p, buf, total, 0);
@@ -237,7 +238,7 @@ static err_t tcp_recv_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t e
             free(buf);
         }
     }
-    tcp_recved(pcb, pbuf_tot_len(p));
+    tcp_recved(pcb, p->tot_len);
     pbuf_free(p);
     return ERR_OK;
 }
@@ -286,7 +287,7 @@ void lwip_bridge_init(void *ctx,
     IP4_ADDR(&netmask, 255, 255, 255, 255);
     IP4_ADDR(&gw, 0, 0, 0, 0);
 
-    netif_add(&g_netif, &addr, &netmask, &gw, NULL, netif_init_fn, ip_input);
+    netif_add(&g_netif, &addr, &netmask, &gw, NULL, netif_init_cb, ip_input);
     netif_set_up(&g_netif);
     netif_set_default(&g_netif);
 
