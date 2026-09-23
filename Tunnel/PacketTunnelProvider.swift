@@ -56,9 +56,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         completionHandler: ((Data?) -> Void)?
     ) {
         msgCount += 1
+        // JSONSerialization не сериализует UInt64 — конвертируем в Int
         let payload: [String: Any] = [
-            "pkts": packetCount,
-            "bytes": byteCount,
+            "pkts": Int(min(packetCount, UInt64(Int.max))),
+            "bytes": Int(min(byteCount, UInt64(Int.max))),
             "uptime": Int(Date().timeIntervalSince(startedAt)),
             "msgs": msgCount,
             "hosts": Array(seenHosts).sorted(),
