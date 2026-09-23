@@ -15,6 +15,7 @@ typedef int16_t  s16_t;
 typedef uint32_t u32_t;
 typedef int32_t  s32_t;
 typedef uintptr_t mem_ptr_t;
+typedef int sys_prot_t;
 
 #define LWIP_RAND() ((u32_t)rand())
 
