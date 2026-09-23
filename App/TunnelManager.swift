@@ -51,10 +51,13 @@ final class TunnelManager: ObservableObject {
                         guard let ref = tunnelManagerRef else { return }
                         let idx = (Int(bitPattern: observer) ?? 1) - 1
                         let eventName = darwinEventNames[safe: idx] ?? "unknown"
-                        ref.lastEvent = eventName
-                        ref.lastEventTime = Date()
+                        // ponytail: pkts не должен перетирать WS-события — иначе
+                        // в UI видно только «pkts» и стадия зависания непонятна.
                         if eventName == "pkts" {
                             ref.lastPacketSignal = Date()
+                        } else {
+                            ref.lastEvent = eventName
+                            ref.lastEventTime = Date()
                         }
                         ref.updateStatsDisplay()
                     }
@@ -70,7 +73,9 @@ final class TunnelManager: ObservableObject {
         var parts: [String] = []
         if let event = lastEvent, let time = lastEventTime {
             let age = Int(Date().timeIntervalSince(time))
-            parts.append("последнее событие: \(event) (\(age)с назад)")
+            parts.append("WS-стадия: \(event) (\(age)с назад)")
+        } else {
+            parts.append("WS-стадия: событий не было")
         }
         if let signal = lastPacketSignal {
             let age = Int(Date().timeIntervalSince(signal))

@@ -84,9 +84,11 @@ final class WSClient {
             }
         }
 
-        DispatchQueue.global().asyncAfter(deadline: .now() + 10) { [weak self] in
-            guard let self, !self.connected, !advanced else { return }
-            NSLog("[WSBridge] WS: \(domain) timed out, trying next")
+        // ponytail: таймер покрывает и «handshake прошёл, но гейтвей молчит» —
+        // раньше guard на connected/advanced оставлял такую сессию висеть вечно.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 10) {
+            guard !advanced else { return }
+            NSLog("[WSBridge] WS: \(domain) silent/failed, trying next")
             wsTask.cancel(with: .goingAway, reason: nil)
             advance()
         }
