@@ -31,10 +31,10 @@ final class WSClient {
         task?.receive { [weak self] result in
             guard let self else { return }
             switch result {
-            case .data(let data):
-                onMessage(data)
-                self.receiveLoop(onMessage: onMessage, onClose: onClose)
-            case .string:
+            case .success(let message):
+                if case .data(let data) = message {
+                    onMessage(data)
+                }
                 self.receiveLoop(onMessage: onMessage, onClose: onClose)
             case .failure:
                 self.connected = false
