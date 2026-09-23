@@ -3,11 +3,14 @@ import Foundation
 /// Разбивает TCP-поток на отдельные MTProto-пакеты для WS-фреймов.
 /// Ключи из init клиента (без secret — стандартная обфускация).
 /// Fast-forward на 64 байта (init уже отправлен как первый фрейм).
+///
+/// ponytail: [UInt8] вместо Data — у Data.subdata(in:) startIndex сдвигается
+/// после removeFirst, что вызывало EXC_BREAKPOINT.
 final class MsgSplitter {
     private let cipher: AESCTR
     private let protoTag: UInt32
-    private var cipherBuf = Data()
-    private var plainBuf = Data()
+    private var cipherBuf: [UInt8] = []
+    private var plainBuf: [UInt8] = []
     private var disabled = false
 
     private static let abridged: UInt32 = 0xEFEFEFEF
@@ -26,9 +29,9 @@ final class MsgSplitter {
         guard !chunk.isEmpty else { return [] }
         if disabled { return [chunk] }
 
-        cipherBuf.append(chunk)
+        cipherBuf.append(contentsOf: [UInt8](chunk))
         if let plain = cipher.update(chunk) {
-            plainBuf.append(plain)
+            plainBuf.append(contentsOf: [UInt8](plain))
         }
 
         var parts: [Data] = []
@@ -38,12 +41,12 @@ final class MsgSplitter {
         while offset < bufLen {
             guard let packetLen = nextPacketLen(offset: offset, avail: bufLen - offset) else { break }
             if packetLen <= 0 {
-                parts.append(cipherBuf.suffix(from: offset))
+                parts.append(Data(cipherBuf[offset...]))
                 offset = bufLen
                 disabled = true
                 break
             }
-            parts.append(cipherBuf.subdata(in: offset..<offset + packetLen))
+            parts.append(Data(cipherBuf[offset..<offset + packetLen]))
             offset += packetLen
         }
 
@@ -57,7 +60,7 @@ final class MsgSplitter {
     /// Возвращает остаток буфера при закрытии соединения.
     func flush() -> [Data] {
         guard !cipherBuf.isEmpty else { return [] }
-        let tail = cipherBuf
+        let tail = Data(cipherBuf)
         cipherBuf.removeAll()
         plainBuf.removeAll()
         return [tail]
@@ -75,15 +78,14 @@ final class MsgSplitter {
     }
 
     private func nextAbridgedLen(offset: Int, avail: Int) -> Int? {
-        let first = plainBuf[plainBuf.startIndex + offset]
+        let first = plainBuf[offset]
         var payloadLen: Int
         var headerLen: Int
         if first == 0x7F || first == 0xFF {
             if avail < 4 { return nil }
-            let b1 = plainBuf[plainBuf.startIndex + offset + 1]
-            let b2 = plainBuf[plainBuf.startIndex + offset + 2]
-            let b3 = plainBuf[plainBuf.startIndex + offset + 3]
-            payloadLen = (Int(b1) | (Int(b2) << 8) | (Int(b3) << 16)) * 4
+            payloadLen = (Int(plainBuf[offset + 1]) |
+                         (Int(plainBuf[offset + 2]) << 8) |
+                         (Int(plainBuf[offset + 3]) << 16)) * 4
             headerLen = 4
         } else {
             payloadLen = Int(first & 0x7F) * 4
@@ -97,11 +99,10 @@ final class MsgSplitter {
 
     private func nextIntermediateLen(offset: Int, avail: Int) -> Int? {
         if avail < 4 { return nil }
-        let base = plainBuf.startIndex + offset
-        let payloadLen = (Int(plainBuf[base]) |
-                         (Int(plainBuf[base + 1]) << 8) |
-                         (Int(plainBuf[base + 2]) << 16) |
-                         (Int(plainBuf[base + 3]) << 24)) & 0x7FFFFFFF
+        let payloadLen = (Int(plainBuf[offset]) |
+                         (Int(plainBuf[offset + 1]) << 8) |
+                         (Int(plainBuf[offset + 2]) << 16) |
+                         (Int(plainBuf[offset + 3]) << 24)) & 0x7FFFFFFF
         if payloadLen <= 0 { return 0 }
         let packetLen = 4 + payloadLen
         if avail < packetLen { return nil }
