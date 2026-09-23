@@ -9,6 +9,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var packetCount: UInt64 = 0
     private var byteCount: UInt64 = 0
     private var seenHosts: Set<String> = []
+    private var msgCount = 0
+    private let startedAt = Date()
 
     override func startTunnel(
         options: [String: NSObject]?,
@@ -19,6 +21,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let ipv4 = NEIPv4Settings(addresses: ["198.18.0.2"], subnetMasks: ["255.255.255.255"])
         ipv4.includedRoutes = TelegramDCs.includedRoutes
         settings.ipv4Settings = ipv4
+
+        let ipv6 = NEIPv6Settings(addresses: ["fd00::2"], networkPrefixLengths: [128])
+        ipv6.includedRoutes = TelegramDCs.includedRoutes6
+        settings.ipv6Settings = ipv6
+
         settings.mtu = 1500
 
         setTunnelNetworkSettings(settings) { [weak self] error in
@@ -48,9 +55,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         _ messageData: Data,
         completionHandler: ((Data?) -> Void)?
     ) {
+        msgCount += 1
         let payload: [String: Any] = [
             "pkts": packetCount,
             "bytes": byteCount,
+            "uptime": Int(Date().timeIntervalSince(startedAt)),
+            "msgs": msgCount,
             "hosts": Array(seenHosts).sorted(),
         ]
         completionHandler?(try? JSONSerialization.data(withJSONObject: payload))
@@ -58,16 +68,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func readLoop() {
         packetFlow.readPackets { [weak self] packets, protocols in
-            self?.handle(packets: packets)
+            self?.handle(packets: packets, protocols: protocols)
             self?.readLoop()
         }
     }
 
-    private func handle(packets: [Data]) {
-        for packet in packets {
+    private func handle(packets: [Data], protocols: [NSNumber]) {
+        for (packet, family) in zip(packets, protocols) {
             packetCount += 1
             byteCount += UInt64(packet.count)
-            if let dst = Self.ipv4Dst(packet), seenHosts.insert(dst).inserted {
+            let dst = family.intValue == AF_INET6 ? Self.ipv6Dst(packet) : Self.ipv4Dst(packet)
+            if let dst, seenHosts.insert(dst).inserted {
                 NSLog("[WSBridge] new dst %@ (pkts=%llu bytes=%llu)",
                       dst, packetCount, byteCount)
             }
@@ -75,12 +86,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // ponytail: пакеты дропаются (фаза 1). В фазе 2 здесь появится lwIP → WS-сплайсинг.
     }
 
-    /// ponytail: только IPv4 — includedRoutes содержат лишь /32 IPv4, v6 сюда не дойдёт.
     private static func ipv4Dst(_ packet: Data) -> String? {
         guard packet.count >= 20 else { return nil }
         return packet.withUnsafeBytes { raw in
             let b = raw.bindMemory(to: UInt8.self)
             return "\(b[16]).\(b[17]).\(b[18]).\(b[19])"
+        }
+    }
+
+    private static func ipv6Dst(_ packet: Data) -> String? {
+        guard packet.count >= 40 else { return nil }
+        return packet.withUnsafeBytes { raw in
+            let b = raw.bindMemory(to: UInt8.self)
+            return (0..<8).map { i in
+                String(format: "%02x%02x", b[16 + i * 2], b[17 + i * 2])
+            }.joined(separator: ":")
         }
     }
 }

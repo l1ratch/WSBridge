@@ -32,18 +32,22 @@ final class TunnelManager: ObservableObject {
             stats = "нет сессии: конфигурация не загружена"
             return
         }
-        // sendProviderMessage имеет два оверлоада (async и completion) — вызываем
-        // completion-вариант явно, чтобы компилятор не выбрал Void-версию.
+        // sendProviderMessage: completion-оверлоад (async-версия резолвится в Void-вариант).
+        var ipcError: Error?
         let data: Data? = await withCheckedContinuation { cont in
             do {
                 try session.sendProviderMessage(Data("stats".utf8)) { cont.resume(returning: $0) }
             } catch {
-                NSLog("[WSBridge] stats error: %@", error.localizedDescription)
+                ipcError = error
                 cont.resume(returning: nil)
             }
         }
+        if let ipcError {
+            stats = "ошибка IPC: \(ipcError.localizedDescription)"
+            return
+        }
         guard let data else {
-            stats = "расширение не ответило (туннель активен?)"
+            stats = "расширение вернуло nil (процесс жив?)"
             return
         }
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -52,8 +56,10 @@ final class TunnelManager: ObservableObject {
         }
         let pkts = json["pkts"] as? UInt64 ?? 0
         let bytes = json["bytes"] as? UInt64 ?? 0
+        let uptime = json["uptime"] as? Int ?? 0
+        let msgs = json["msgs"] as? Int ?? 0
         let hosts = json["hosts"] as? [String] ?? []
-        stats = "пакетов: \(pkts)\nбайт: \(bytes)" +
+        stats = "пакетов: \(pkts)\nбайт: \(bytes)\nuptime: \(uptime)с, ответов: \(msgs)" +
             (hosts.isEmpty ? "\nадреса: (нет — трафик не дошёл)" : "\nадреса: " + hosts.joined(separator: ", "))
     }
 
