@@ -7,8 +7,11 @@ import Foundation
 final class WSClient {
     private static let sharedSession: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10
-        config.timeoutIntervalForResource = 300
+        // ponytail: request-timeout на WS-таске убивает сокет, если гейтвей молчит;
+        // resource-timeout убивает сессию через N секунд. Каскадом управляет наш
+        // собственный 10с-таймер, поэтому здесь значения заведомо щедрые.
+        config.timeoutIntervalForRequest = 300
+        config.timeoutIntervalForResource = 86400
         return URLSession(configuration: config)
     }()
 
@@ -45,6 +48,7 @@ final class WSClient {
             return
         }
         NSLog("[WSBridge] WS: trying \(domain)")
+        postEvent("ws_try")
         var request = URLRequest(url: url)
         request.setValue("binary", forHTTPHeaderField: "Sec-WebSocket-Protocol")
         let wsTask = Self.sharedSession.webSocketTask(with: request)
@@ -53,9 +57,14 @@ final class WSClient {
 
         // Init — первым фреймом на этом домене (URLSession буферизует до handshake).
         // Без него гейтвей молчит, и 10с-таймаут гонит каскад дальше.
+        // ws_up = send-колбэк отработал без ошибки: хендшейк прошёл, init в сокете.
         if let initFrame {
             wsTask.send(.data(initFrame)) { error in
-                if let error { NSLog("[WSBridge] WS init send error: \(error.localizedDescription)") }
+                if let error {
+                    NSLog("[WSBridge] WS init send error: \(error.localizedDescription)")
+                } else {
+                    postEvent("ws_up")
+                }
             }
         }
 
@@ -126,5 +135,14 @@ final class WSClient {
         connected = false
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
+    }
+
+    private func postEvent(_ name: String) {
+        let cfName = "com.l1ratch.WSBridge.\(name)" as CFString
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName(cfName),
+            nil, nil, true
+        )
     }
 }
