@@ -93,6 +93,7 @@ final class TunnelSession {
     /// Данные от kws-гейтвея → клиенту через lwIP.
     /// WS-колбэк приходит с потока URLSession — гоним через очередь.
     private func handleWSData(_ data: Data) {
+        postEvent("ws_recv")
         queue.async { [weak self] in
             guard let self else { return }
             _ = self.bridge.write(connId: self.connId, data: data)
