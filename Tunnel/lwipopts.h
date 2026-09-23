@@ -18,13 +18,13 @@
 
 #define MEMP_NUM_TCP_PCB        32
 #define MEMP_NUM_TCP_PCB_LISTEN 8
-#define MEMP_NUM_TCP_SEG        64
+#define MEMP_NUM_TCP_SEG        256
 #define MEMP_NUM_PBUF           64
 #define PBUF_POOL_SIZE          128
 #define PBUF_POOL_BUFSIZE       1600
 
 #define TCP_SND_BUF             65536
-#define TCP_WND                 65536
+#define TCP_WND                 65535
 #define TCP_MSS                 1460
 
 #define LWIP_NETIF_TX_SINGLE_PBUF 1
