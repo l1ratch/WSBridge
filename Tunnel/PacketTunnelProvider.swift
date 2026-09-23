@@ -56,15 +56,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         completionHandler: ((Data?) -> Void)?
     ) {
         msgCount += 1
-        // JSONSerialization не сериализует UInt64 — конвертируем в Int
-        let payload: [String: Any] = [
-            "pkts": Int(min(packetCount, UInt64(Int.max))),
-            "bytes": Int(min(byteCount, UInt64(Int.max))),
-            "uptime": Int(Date().timeIntervalSince(startedAt)),
-            "msgs": msgCount,
-            "hosts": Array(seenHosts).sorted(),
-        ]
-        completionHandler?(try? JSONSerialization.data(withJSONObject: payload))
+        // ponytail: изоляция IPC — сначала хардкод-строка, потом JSON.
+        // Если хардкод доходит, а JSON нет — проблема в сериализации.
+        let text = "pkts=\(packetCount) bytes=\(byteCount) uptime=\(Int(Date().timeIntervalSince(startedAt)))s msgs=\(msgCount) hosts=\(Array(seenHosts).sorted().joined(separator: ","))"
+        completionHandler?(text.data(using: .utf8))
     }
 
     private func readLoop() {

@@ -50,17 +50,7 @@ final class TunnelManager: ObservableObject {
             stats = "расширение вернуло nil (процесс жив?)"
             return
         }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            stats = "непарсируемый ответ: \(String(decoding: data, as: UTF8.self))"
-            return
-        }
-        let pkts = json["pkts"] as? UInt64 ?? 0
-        let bytes = json["bytes"] as? UInt64 ?? 0
-        let uptime = json["uptime"] as? Int ?? 0
-        let msgs = json["msgs"] as? Int ?? 0
-        let hosts = json["hosts"] as? [String] ?? []
-        stats = "пакетов: \(pkts)\nбайт: \(bytes)\nuptime: \(uptime)с, ответов: \(msgs)" +
-            (hosts.isEmpty ? "\nадреса: (нет — трафик не дошёл)" : "\nадреса: " + hosts.joined(separator: ", "))
+        stats = String(decoding: data, as: UTF8.self)
     }
 
     func toggle() async {
