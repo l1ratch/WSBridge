@@ -59,47 +59,13 @@ final class TunnelManager: ObservableObject {
         }
     }
 
-    func fetchStats() async {
+    func fetchStats() {
         updateStatsDisplay()
     }
 
     func reload() async {
         manager = try? await NETunnelProviderManager.loadAllFromPreferences().first
         status = manager?.connection.status ?? .invalid
-    }
-
-    func fetchStats() async {
-        // ponytail: sendProviderMessage не работает через GBox (IPC контекст не совпадает).
-        // Читаем статистику из shared App Group container напрямую.
-        guard let defaults = UserDefaults(suiteName: "group.com.l1ratch.WSBridge") else {
-            stats = "нет App Group container"
-            return
-        }
-        let pkts = defaults.integer(forKey: "pkts")
-        let bytes = defaults.integer(forKey: "bytes")
-        let uptime = defaults.integer(forKey: "uptime")
-        let hosts = defaults.stringArray(forKey: "hosts") ?? []
-
-        // Проверяем heartbeat-файл — расширение пишет его при старте туннеля
-        var heartbeatInfo = ""
-        if let container = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.com.l1ratch.WSBridge"
-        ) {
-            let url = container.appendingPathComponent("heartbeat.txt")
-            if let text = try? String(contentsOf: url, encoding: .utf8) {
-                heartbeatInfo = "\nheartbeat: \(text)"
-            } else {
-                heartbeatInfo = "\nheartbeat: файл не найден (расширение не писало)"
-            }
-        }
-
-        if pkts == 0 && bytes == 0 && uptime == 0 {
-            stats = "container пуст — расширение ещё не писало (туннель активен?)" + heartbeatInfo
-        } else {
-            stats = "пакетов: \(pkts)\nбайт: \(bytes)\nuptime: \(uptime)с" +
-                (hosts.isEmpty ? "\nадреса: (нет)" : "\nадреса: " + hosts.joined(separator: ", ")) +
-                heartbeatInfo
-        }
     }
 
     func toggle() async {

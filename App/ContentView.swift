@@ -16,7 +16,7 @@ struct ContentView: View {
             }
             .buttonStyle(.borderedProminent)
             Button("Статистика туннеля") {
-                Task { await tunnel.fetchStats() }
+                tunnel.fetchStats()
             }
             .buttonStyle(.bordered)
             if let stats = tunnel.stats {
