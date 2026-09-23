@@ -4,12 +4,16 @@ import Foundation
 /// Фаза 2: lwIP + WS-сплайсинг.
 /// Перехватывает TCP к DC Telegram, восстанавливает поток через lwIP,
 /// парсит init, коннектится к kws-гейтвею и мостит байты.
+///
+/// ponytail: lwIP с NO_SYS=1 однопоточный. ВСЕ операции (input, poll, write, close)
+/// идут через одну serial-очередь. readPackets и WS-колбэки приходят с разных потоков.
 final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let lwip = LWIPBridge()
     private var sessions: [UInt32: TunnelSession] = [:]
     private var packetCount: UInt64 = 0
     private var byteCount: UInt64 = 0
     private let startedAt = Date()
+    private let lwipQueue = DispatchQueue(label: "com.l1ratch.WSBridge.lwip")
 
     override func startTunnel(
         options: [String: NSObject]?,
@@ -34,7 +38,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             NSLog("[WSBridge] tunnel started")
             self?.setupLWIP()
             self?.readLoop()
-            self?.startPollTimer()
             completionHandler(nil)
         }
     }
@@ -63,7 +66,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func handleAccept(connId: UInt32, dcIP: UInt32) {
         NSLog("[WSBridge] accept conn \(connId) dc=\(dcIP)")
-        let session = TunnelSession(connId: connId, dcIP: dcIP, bridge: lwip)
+        let session = TunnelSession(connId: connId, dcIP: dcIP, bridge: lwip, queue: lwipQueue)
         sessions[connId] = session
     }
 
@@ -78,18 +81,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func readLoop() {
         packetFlow.readPackets { [weak self] packets, protocols in
-            for (packet, family) in zip(packets, protocols) {
-                guard family.intValue == AF_INET else { continue }
-                self?.packetCount += 1
-                self?.byteCount += UInt64(packet.count)
-                self?.lwip.input(packet)
+            guard let self else { return }
+            self.lwipQueue.async {
+                for (packet, family) in zip(packets, protocols) {
+                    guard family.intValue == AF_INET else { continue }
+                    self.packetCount += 1
+                    self.byteCount += UInt64(packet.count)
+                    self.lwip.input(packet)
+                }
+                self.lwip.poll()
+                if self.packetCount % 50 == 0 {
+                    self.postDarwinNotification()
+                }
             }
-            // ponytail: Darwin notification каждые 50 пакетов для статистики
-            if let self, self.packetCount % 50 == 0 {
-                self.postDarwinNotification()
-            }
-            // ponytail: async dispatch чтобы не блокировать IPC
-            DispatchQueue.main.async { self?.readLoop() }
+            self.readLoop()
         }
     }
 
@@ -102,22 +107,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         )
     }
 
-    private var pollTimer: Timer?
-    private func startPollTimer() {
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            self?.lwip.poll()
-        }
-    }
-
     override func stopTunnel(
         with reason: NEProviderStopReason,
         completionHandler: @escaping () -> Void
     ) {
         NSLog("[WSBridge] tunnel stopped (reason=%ld, pkts=%llu, bytes=%llu)",
               reason.rawValue, packetCount, byteCount)
-        pollTimer?.invalidate()
-        for (_, session) in sessions { session.handleClose() }
-        sessions.removeAll()
+        lwipQueue.sync {
+            for (_, session) in sessions { session.handleClose() }
+            sessions.removeAll()
+        }
         completionHandler()
     }
 

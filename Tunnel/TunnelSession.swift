@@ -2,23 +2,28 @@ import Foundation
 
 /// Оркестратор одного соединения: lwIP TCP ↔ WS к kws-гейтвею.
 /// Парсит init, коннектится к kws{dc}, мостит байты через MsgSplitter.
+///
+/// ponytail: ВСЕ lwIP-операции (write, close) идут через shared serial-очередь.
+/// WS-колбэки приходят с потока URLSession — без очереди будет гонка.
 final class TunnelSession {
     let connId: UInt32
     let dcIP: UInt32
     private let bridge: LWIPBridge
+    private let queue: DispatchQueue
     private var ws: WSClient?
     private var splitter: MsgSplitter?
     private var initBuffer = Data()
     private var initParsed = false
     private var wsConnected = false
 
-    init(connId: UInt32, dcIP: UInt32, bridge: LWIPBridge) {
+    init(connId: UInt32, dcIP: UInt32, bridge: LWIPBridge, queue: DispatchQueue) {
         self.connId = connId
         self.dcIP = dcIP
         self.bridge = bridge
+        self.queue = queue
     }
 
-    /// Данные от клиента (SwiftGram) через lwIP
+    /// Данные от клиента (SwiftGram) через lwIP. Вызывается на lwipQueue.
     func handleData(_ data: Data) {
         if !initParsed {
             initBuffer.append(data)
@@ -27,13 +32,11 @@ final class TunnelSession {
                 if let parsed = InitParser.parse(Data(initData)) {
                     initParsed = true
                     startWS(parsed: parsed)
-                    // Остаток после init
                     let rest = initBuffer.suffix(from: InitParser.handshakeLen)
                     if !rest.isEmpty {
                         forwardToWS(rest)
                     }
                 } else {
-                    // Не MTProto init — дропаем
                     NSLog("[WSBridge] conn \(connId): not a valid MTProto init, dropping")
                     bridge.close(connId: connId)
                 }
@@ -76,17 +79,23 @@ final class TunnelSession {
         }
     }
 
-    /// Данные от kws-гейтвея → клиенту через lwIP
+    /// Данные от kws-гейтвея → клиенту через lwIP.
+    /// WS-колбэк приходит с потока URLSession — гоним через очередь.
     private func handleWSData(_ data: Data) {
-        _ = bridge.write(connId: connId, data: data)
+        queue.async { [weak self] in
+            guard let self else { return }
+            _ = self.bridge.write(connId: self.connId, data: data)
+        }
     }
 
     private func handleWSClose() {
-        wsConnected = false
-        bridge.close(connId: connId)
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.bridge.close(connId: self.connId)
+        }
     }
 
-    /// Соединение закрыто (клиент отключился или ошибка)
+    /// Соединение закрыто (клиент отключился или ошибка). Вызывается на lwipQueue.
     func handleClose() {
         ws?.close()
         ws = nil
