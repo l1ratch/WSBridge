@@ -55,51 +55,73 @@ final class WSClient {
         task = wsTask
         wsTask.resume()
 
-        // Init — первым фреймом на этом домене (URLSession буферизует до handshake).
-        // Без него гейтвей молчит, и 10с-таймаут гонит каскад дальше.
-        // ws_up = send-колбэк отработал без ошибки: хендшейк прошёл, init в сокете.
+        // Failover валиден только ДО доставки init: keystream клиента расходуется
+        // один раз, на следующем домене init уже не примут. После ws_up любая
+        // ошибка закрывает сессию — SwiftGram сам переподключится (новая сессия,
+        // новый каскад). Десктоп делает так же: таймаут только на фазу коннекта.
+        let state = TryState()
+        func advance() {
+            guard state.claim() else { return }
+            self.task = nil
+            self.tryConnect(domains: domains, path: path, index: index + 1, onMessage: onMessage, onClose: onClose)
+        }
+        func fail() {
+            guard state.claim() else { return }
+            self.task = nil
+            onClose()
+        }
+
+        // Init — первым фреймом (URLSession буферизует до конца handshake).
+        // ws_up = init в сокете; с этого момента каскадный таймер выключен.
         if let initFrame {
             wsTask.send(.data(initFrame)) { error in
                 if let error {
                     NSLog("[WSBridge] WS init send error: \(error.localizedDescription)")
                 } else {
+                    state.delivered = true
                     Self.postEvent("ws_up")
                 }
             }
-        }
-
-        // ponytail: guard от двойного advance (таймаут + failure)
-        var advanced = false
-        func advance() {
-            guard !advanced else { return }
-            advanced = true
-            self.task = nil
-            self.tryConnect(domains: domains, path: path, index: index + 1, onMessage: onMessage, onClose: onClose)
         }
 
         wsTask.receive { [weak self] result in
             guard let self else { return }
             switch result {
             case .success(let message):
-                advanced = true
+                state.claim()
                 self.connected = true
                 if case .data(let data) = message {
                     onMessage(data)
                 }
                 self.receiveLoop(onMessage: onMessage, onClose: onClose)
-            case .failure:
-                NSLog("[WSBridge] WS: \(domain) failed, trying next")
-                advance()
+            case .failure(let error):
+                NSLog("[WSBridge] WS: \(domain) failed (\(error.localizedDescription)), next")
+                state.delivered ? fail() : advance()
             }
         }
 
-        // ponytail: таймер покрывает и «handshake прошёл, но гейтвей молчит» —
-        // раньше guard на connected/advanced оставлял такую сессию висеть вечно.
+        // Таймер только на фазу коннекта. Доставленный init (delivered) гасит его —
+        // раньше он убивал живое соединение, если DC отвечал дольше 10с.
         DispatchQueue.global().asyncAfter(deadline: .now() + 10) {
-            guard !advanced else { return }
-            NSLog("[WSBridge] WS: \(domain) silent/failed, trying next")
+            guard !state.delivered, state.claim() else { return }
+            NSLog("[WSBridge] WS: \(domain) connect timed out, trying next")
             wsTask.cancel(with: .goingAway, reason: nil)
-            advance()
+            self.task = nil
+            self.tryConnect(domains: domains, path: path, index: index + 1, onMessage: onMessage, onClose: onClose)
+        }
+    }
+
+    /// ponytail: NSLock вместо атомика — claim() должен быть именно once,
+    /// колбэки send/receive/timer приходят с разных потоков.
+    private final class TryState {
+        private let lock = NSLock()
+        private var claimed = false
+        var delivered = false
+        func claim() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            if claimed { return false }
+            claimed = true
+            return true
         }
     }
 
