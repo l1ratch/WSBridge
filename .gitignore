@@ -2,6 +2,9 @@
 ref-tg-ws-proxy/
 ref-krasava/
 
+# downloaded CI artifacts
+dist/
+
 # macOS / Xcode
 .DS_Store
 build/
