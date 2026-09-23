@@ -332,6 +332,31 @@ void lwip_bridge_input(const uint8_t *data, uint16_t len) {
     buf[10] = (csum >> 8) & 0xFF;
     buf[11] = csum & 0xFF;
 
+    // Recalculate TCP checksum (pseudo-header includes IP addresses)
+    uint8_t proto = buf[9];
+    if (proto == 6 && len >= 40) { // TCP
+        buf[36] = 0; buf[37] = 0;
+        uint16_t tcp_len = len - 20;
+        uint32_t sum2 = 0;
+        // Pseudo-header
+        sum2 += ((uint16_t)buf[12] << 8) | buf[13];
+        sum2 += ((uint16_t)buf[14] << 8) | buf[15];
+        sum2 += ((uint16_t)buf[16] << 8) | buf[17];
+        sum2 += ((uint16_t)buf[18] << 8) | buf[19];
+        sum2 += proto;
+        sum2 += tcp_len;
+        // TCP segment
+        for (int i = 20; i < len; i += 2) {
+            uint16_t word = ((uint16_t)buf[i] << 8);
+            if (i + 1 < len) word |= buf[i+1];
+            sum2 += word;
+        }
+        while (sum2 >> 16) sum2 = (sum2 & 0xFFFF) + (sum2 >> 16);
+        uint16_t tcp_csum = (uint16_t)~sum2;
+        buf[36] = (tcp_csum >> 8) & 0xFF;
+        buf[37] = tcp_csum & 0xFF;
+    }
+
     struct pbuf *p = pbuf_alloc(PBUF_RAW, len, PBUF_RAM);
     if (!p) { free(buf); return; }
     memcpy(p->payload, buf, len);
