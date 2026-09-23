@@ -14,12 +14,16 @@ final class WSClient {
 
     private var task: URLSessionWebSocketTask?
     private var connected = false
+    private var initFrame: Data?
 
     init() {}
 
     /// Подключается к kws-гейтвею. Пробует CF-домены, потом web.telegram.org.
-    func connect(dc: Int, isTestDC: Bool, onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
+    /// initFrame (64-байтовый MTProto init) шлётся первым фреймом на КАЖДОМ
+    /// домене каскада — при failover старый task со своим init выбрасывается.
+    func connect(dc: Int, isTestDC: Bool, initFrame: Data, onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
         let path = isTestDC ? "/apiws_test" : "/apiws"
+        self.initFrame = initFrame
 
         // Каскад: CF-домены → web.telegram.org
         let cfDomains = CFDomains.domains(dc: dc)
@@ -41,9 +45,19 @@ final class WSClient {
             return
         }
         NSLog("[WSBridge] WS: trying \(domain)")
-        let wsTask = Self.sharedSession.webSocketTask(with: url)
+        var request = URLRequest(url: url)
+        request.setValue("binary", forHTTPHeaderField: "Sec-WebSocket-Protocol")
+        let wsTask = Self.sharedSession.webSocketTask(with: request)
         task = wsTask
         wsTask.resume()
+
+        // Init — первым фреймом на этом домене (URLSession буферизует до handshake).
+        // Без него гейтвей молчит, и 10с-таймаут гонит каскад дальше.
+        if let initFrame {
+            wsTask.send(.data(initFrame)) { error in
+                if let error { NSLog("[WSBridge] WS init send error: \(error.localizedDescription)") }
+            }
+        }
 
         // ponytail: guard от двойного advance (таймаут + failure)
         var advanced = false
@@ -94,9 +108,12 @@ final class WSClient {
         }
     }
 
+    // ponytail: send сразу после resume() — URLSession сам буферизует до конца
+    // handshake. Guard на connected был багом: init дропался, гейтвей молчал.
     func send(_ data: Data) {
-        guard connected else { return }
-        task?.send(.data(data)) { _ in }
+        task?.send(.data(data)) { error in
+            if let error { NSLog("[WSBridge] WS send error: \(error.localizedDescription)") }
+        }
     }
 
     func sendBatch(_ parts: [Data]) {

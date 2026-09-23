@@ -52,17 +52,18 @@ final class TunnelSession {
 
         splitter = MsgSplitter(key: parsed.key, iv: parsed.iv, protoTag: parsed.protoTag)
 
+        // 64-байтовый init — первый WS-фрейм. WSClient шлёт его на каждом домене
+        // каскада, поэтому передаём сюда, а не отдельным send() после connect().
+        let initData = Data(initBuffer.prefix(InitParser.handshakeLen))
+
         let ws = WSClient()
         self.ws = ws
-        ws.connect(dc: parsed.dcId, isTestDC: parsed.isTestDC, onMessage: { [weak self] data in
+        ws.connect(dc: parsed.dcId, isTestDC: parsed.isTestDC, initFrame: initData, onMessage: { [weak self] data in
             self?.handleWSData(data)
         }, onClose: { [weak self] in
             self?.handleWSClose()
         })
 
-        // Отправляем init как первый WS-фрейм
-        let initData = initBuffer.prefix(InitParser.handshakeLen)
-        ws.send(Data(initData))
         wsConnected = true
         postEvent("ws_sent")
     }
