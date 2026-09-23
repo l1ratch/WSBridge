@@ -66,6 +66,13 @@ final class TunnelManager: ObservableObject {
                 m = fresh
                 manager = m
             }
+            // NEVPNErrorDomain error 2 (configurationDisabled): менеджер по умолчанию
+            // сохраняется выключенным — включаем конфигурацию до старта туннеля.
+            if !m.isEnabled {
+                m.isEnabled = true
+                try await m.saveToPreferences()
+                try await m.loadFromPreferences()
+            }
             switch m.connection.status {
             case .connected, .connecting, .reasserting:
                 m.connection.stopVPNTunnel()
