@@ -68,6 +68,9 @@ targets:
     sources:
       - path: Tunnel/lwip
         headerVisibility: private
+        excludes:
+          - "**/makefsdata/**"
+          - "**/makefsdata.c"
       - path: Tunnel/lwip_bridge.c
       - path: Tunnel/lwipopts.h
         headerVisibility: private
