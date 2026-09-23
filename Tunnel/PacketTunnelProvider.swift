@@ -46,14 +46,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// Запрос телеметрии из приложения (NETunnelProviderSession.sendMessage).
     override func handleAppMessage(
         _ messageData: Data,
-        completionHandler: @escaping (Data?) -> Void
+        completionHandler: (@escaping (Data?) -> Void)?
     ) {
         let payload: [String: Any] = [
             "pkts": packetCount,
             "bytes": byteCount,
             "hosts": Array(seenHosts).sorted(),
         ]
-        completionHandler(try? JSONSerialization.data(withJSONObject: payload))
+        completionHandler?(try? JSONSerialization.data(withJSONObject: payload))
     }
 
     private func readLoop() {
