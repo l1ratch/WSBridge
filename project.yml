@@ -1,0 +1,61 @@
+name: WSBridge
+options:
+  bundleIdPrefix: com.l1ratch
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2"
+
+targets:
+  WSBridge:
+    type: application
+    platform: iOS
+    sources: [App]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: WSBridge
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    entitlements:
+      path: App/WSBridge.entitlements
+      properties:
+        com.apple.developer.networking.vpn.api: [allow-vpn]
+    dependencies:
+      - target: WSBridgeTunnel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.l1ratch.WSBridge
+
+  WSBridgeTunnel:
+    type: app-extension
+    platform: iOS
+    sources: [Tunnel]
+    info:
+      path: Tunnel/Info.plist
+      properties:
+        CFBundleDisplayName: WSBridge Tunnel
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: Tunnel/WSBridgeTunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.l1ratch.WSBridge.tunnel
+
+schemes:
+  WSBridge:
+    build:
+      targets:
+        WSBridge: all

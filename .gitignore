@@ -1,0 +1,9 @@
+# reference clones, not part of the build
+ref-tg-ws-proxy/
+ref-krasava/
+
+# macOS / Xcode
+.DS_Store
+build/
+*.xcodeproj
+!project.yml
