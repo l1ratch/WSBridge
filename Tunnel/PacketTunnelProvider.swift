@@ -65,7 +65,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func readLoop() {
         packetFlow.readPackets { [weak self] packets, protocols in
             self?.handle(packets: packets, protocols: protocols)
-            self?.readLoop()
+            // ponytail: без async dispatch рекурсия readPackets создаёт плотный цикл
+            // на main queue — run loop не успевает доставить handleAppMessage (IPC).
+            DispatchQueue.main.async { self?.readLoop() }
         }
     }
 
