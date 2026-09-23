@@ -46,7 +46,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// Запрос телеметрии из приложения (NETunnelProviderSession.sendMessage).
     override func handleAppMessage(
         _ messageData: Data,
-        completionHandler: (@escaping (Data?) -> Void)?
+        completionHandler: ((Data?) -> Void)?
     ) {
         let payload: [String: Any] = [
             "pkts": packetCount,
