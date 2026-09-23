@@ -100,20 +100,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                       dst, packetCount, byteCount)
             }
         }
-        // ponytail: пишем статистику в shared container каждые 100 пакетов
-        if packetCount % 100 == 0 {
-            writeStats()
+        // ponytail: Darwin notification — единственный IPC без entitlements.
+        // Постим каждые 50 пакетов, чтобы приложение видело «трафик течёт».
+        if packetCount % 50 == 0 {
+            postDarwinNotification()
         }
         // ponytail: пакеты дропаются (фаза 1). В фазе 2 здесь появится lwIP → WS-сплайсинг.
     }
 
-    private func writeStats() {
-        guard let defaults = UserDefaults(suiteName: "group.com.l1ratch.WSBridge") else { return }
-        defaults.set(Int(min(packetCount, UInt64(Int.max))), forKey: "pkts")
-        defaults.set(Int(min(byteCount, UInt64(Int.max))), forKey: "bytes")
-        defaults.set(Int(Date().timeIntervalSince(startedAt)), forKey: "uptime")
-        defaults.set(Array(seenHosts).sorted(), forKey: "hosts")
-        defaults.synchronize()
+    private func postDarwinNotification() {
+        let name = "com.l1ratch.WSBridge.pkts" as CFString
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName(name),
+            nil, nil, true
+        )
     }
 
     private static func ipv4Dst(_ packet: Data) -> String? {

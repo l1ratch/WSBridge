@@ -1,6 +1,9 @@
 import Foundation
 import NetworkExtension
 
+// ponytail: глобальная ссылка для C-callback Darwin notifications
+private var tunnelManagerRef: TunnelManager?
+
 @MainActor
 final class TunnelManager: ObservableObject {
     // ponytail: держим в одном месте; bundle id должен совпадать с project.yml и профилем подписи
@@ -8,18 +11,56 @@ final class TunnelManager: ObservableObject {
 
     @Published private(set) var status: NEVPNStatus = .invalid
     @Published private(set) var stats: String?
+    @Published private(set) var lastPacketSignal: Date?
     @Published var errorMessage: String?
 
     private var manager: NETunnelProviderManager?
+    private var darwinObserver: CFRunLoopObserver?
 
     init() {
+        tunnelManagerRef = self
         NotificationCenter.default.addObserver(
             forName: .NEVPNStatusDidChange, object: nil, queue: .main
         ) { [weak self] note in
             guard let conn = note.object as? NEVPNConnection else { return }
             Task { @MainActor in self?.status = conn.status }
         }
+        observeDarwinNotifications()
         Task { await reload() }
+    }
+
+    /// ponytail: Darwin notifications — единственный IPC без entitlements.
+    /// Расширение постит сигнал каждые 50 пакетов; приложение слушает.
+    private func observeDarwinNotifications() {
+        let name = "com.l1ratch.WSBridge.pkts" as CFString
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            nil,
+            { _, _, _, _, _ in
+                DispatchQueue.main.async {
+                    tunnelManagerRef?.lastPacketSignal = Date()
+                    tunnelManagerRef?.updateStatsDisplay()
+                }
+            },
+            name,
+            nil,
+            .deliverImmediately
+        )
+    }
+
+    func updateStatsDisplay() {
+        if let signal = lastPacketSignal {
+            let age = Int(Date().timeIntervalSince(signal))
+            stats = age < 3
+                ? "трафик течёт (сигнал \(age)с назад)"
+                : "последний сигнал \(age)с назад"
+        } else {
+            stats = "сигналов от расширения не было"
+        }
+    }
+
+    func fetchStats() async {
+        updateStatsDisplay()
     }
 
     func reload() async {
