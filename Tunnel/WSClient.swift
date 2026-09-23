@@ -48,7 +48,7 @@ final class WSClient {
             return
         }
         NSLog("[WSBridge] WS: trying \(domain)")
-        postEvent("ws_try")
+        Self.postEvent("ws_try")
         var request = URLRequest(url: url)
         request.setValue("binary", forHTTPHeaderField: "Sec-WebSocket-Protocol")
         let wsTask = Self.sharedSession.webSocketTask(with: request)
@@ -63,7 +63,7 @@ final class WSClient {
                 if let error {
                     NSLog("[WSBridge] WS init send error: \(error.localizedDescription)")
                 } else {
-                    postEvent("ws_up")
+                    Self.postEvent("ws_up")
                 }
             }
         }
@@ -137,7 +137,7 @@ final class WSClient {
         task = nil
     }
 
-    private func postEvent(_ name: String) {
+    private static func postEvent(_ name: String) {
         let cfName = "com.l1ratch.WSBridge.\(name)" as CFString
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
