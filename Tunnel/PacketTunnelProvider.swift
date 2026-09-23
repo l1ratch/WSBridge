@@ -66,6 +66,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func handleAccept(connId: UInt32, dcIP: UInt32) {
         NSLog("[WSBridge] accept conn \(connId) dc=\(dcIP)")
+        postDarwinEvent("accept")
         let session = TunnelSession(connId: connId, dcIP: dcIP, bridge: lwip, queue: lwipQueue)
         sessions[connId] = session
     }
@@ -99,10 +100,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     private func postDarwinNotification() {
-        let name = "com.l1ratch.WSBridge.pkts" as CFString
+        postDarwinEvent("pkts")
+    }
+
+    private func postDarwinEvent(_ name: String) {
+        let cfName = "com.l1ratch.WSBridge.\(name)" as CFString
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
-            CFNotificationName(name),
+            CFNotificationName(cfName),
             nil, nil, true
         )
     }

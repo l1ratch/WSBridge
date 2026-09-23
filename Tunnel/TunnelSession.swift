@@ -48,6 +48,7 @@ final class TunnelSession {
 
     private func startWS(parsed: InitParser.ParsedInit) {
         NSLog("[WSBridge] conn \(connId): DC\(parsed.dcId) media=\(parsed.isMedia) test=\(parsed.isTestDC) proto=0x\(String(parsed.protoTag, radix: 16))")
+        postEvent("init")
 
         splitter = MsgSplitter(key: parsed.key, iv: parsed.iv, protoTag: parsed.protoTag)
 
@@ -63,6 +64,16 @@ final class TunnelSession {
         let initData = initBuffer.prefix(InitParser.handshakeLen)
         ws.send(Data(initData))
         wsConnected = true
+        postEvent("ws_sent")
+    }
+
+    private func postEvent(_ name: String) {
+        let cfName = "com.l1ratch.WSBridge.\(name)" as CFString
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName(cfName),
+            nil, nil, true
+        )
     }
 
     private func forwardToWS(_ data: Data) {

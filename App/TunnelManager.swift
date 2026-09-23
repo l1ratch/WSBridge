@@ -12,6 +12,8 @@ final class TunnelManager: ObservableObject {
     @Published private(set) var status: NEVPNStatus = .invalid
     @Published private(set) var stats: String?
     @Published private(set) var lastPacketSignal: Date?
+    @Published private(set) var lastEvent: String?
+    @Published private(set) var lastEventTime: Date?
     @Published var errorMessage: String?
 
     private var manager: NETunnelProviderManager?
@@ -30,33 +32,44 @@ final class TunnelManager: ObservableObject {
     }
 
     /// ponytail: Darwin notifications — единственный IPC без entitlements.
-    /// Расширение постит сигнал каждые 50 пакетов; приложение слушает.
+    /// Расширение постит события на каждом этапе; приложение слушает.
     private func observeDarwinNotifications() {
-        let name = "com.l1ratch.WSBridge.pkts" as CFString
-        CFNotificationCenterAddObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            nil,
-            { _, _, _, _, _ in
-                DispatchQueue.main.async {
-                    tunnelManagerRef?.lastPacketSignal = Date()
-                    tunnelManagerRef?.updateStatsDisplay()
-                }
-            },
-            name,
-            nil,
-            .deliverImmediately
-        )
+        let events = ["pkts", "accept", "init", "ws_sent", "ws_recv", "ws_close"]
+        for event in events {
+            let name = "com.l1ratch.WSBridge.\(event)" as CFString
+            CFNotificationCenterAddObserver(
+                CFNotificationCenterGetDarwinNotifyCenter(),
+                nil,
+                { _, _, name, _, _ in
+                    DispatchQueue.main.async {
+                        guard let ref = tunnelManagerRef, let name else { return }
+                        let eventName = (name as String).replacingOccurrences(of: "com.l1ratch.WSBridge.", with: "")
+                        ref.lastEvent = eventName
+                        ref.lastEventTime = Date()
+                        if eventName == "pkts" {
+                            ref.lastPacketSignal = Date()
+                        }
+                        ref.updateStatsDisplay()
+                    }
+                },
+                name,
+                nil,
+                .deliverImmediately
+            )
+        }
     }
 
     func updateStatsDisplay() {
+        var parts: [String] = []
+        if let event = lastEvent, let time = lastEventTime {
+            let age = Int(Date().timeIntervalSince(time))
+            parts.append("последнее событие: \(event) (\(age)с назад)")
+        }
         if let signal = lastPacketSignal {
             let age = Int(Date().timeIntervalSince(signal))
-            stats = age < 3
-                ? "трафик течёт (сигнал \(age)с назад)"
-                : "последний сигнал \(age)с назад"
-        } else {
-            stats = "сигналов от расширения не было"
+            parts.append(age < 3 ? "трафик течёт" : "последний трафик \(age)с назад")
         }
+        stats = parts.isEmpty ? "сигналов от расширения не было" : parts.joined(separator: "\n")
     }
 
     func fetchStats() {
