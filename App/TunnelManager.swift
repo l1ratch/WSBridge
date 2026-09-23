@@ -37,13 +37,13 @@ final class TunnelManager: ObservableObject {
         let events = ["pkts", "accept", "init", "ws_sent", "ws_recv", "ws_close"]
         for event in events {
             let name = "com.l1ratch.WSBridge.\(event)" as CFString
+            let eventName = event
             CFNotificationCenterAddObserver(
                 CFNotificationCenterGetDarwinNotifyCenter(),
                 nil,
-                { _, _, name, _, _ in
+                { _, _, _, _, _ in
                     DispatchQueue.main.async {
-                        guard let ref = tunnelManagerRef, let name else { return }
-                        let eventName = (name as CFString as String).replacingOccurrences(of: "com.l1ratch.WSBridge.", with: "")
+                        guard let ref = tunnelManagerRef else { return }
                         ref.lastEvent = eventName
                         ref.lastEventTime = Date()
                         if eventName == "pkts" {
