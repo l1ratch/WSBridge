@@ -96,6 +96,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         io.setEventHandler { [weak self] in
             guard let self else { return }
             EventLog.append("io:in=\(self.packetCount) out=\(EventLog.outPkts) wd=\(EventLog.wsDown) wf=\(EventLog.writeFails) up=\(EventLog.upBytes) rx=\(EventLog.rxBytes) pend=\(EventLog.pendCur) sent=\(EventLog.sentCb)")
+            for (id, _) in self.sessions.sorted(by: { $0.key < $1.key }).prefix(2) {
+                var st: UInt32 = 0, un: UInt32 = 0, rc: UInt32 = 0
+                lwip_bridge_conn_stats(id, &st, &un, &rc)
+                EventLog.append("c\(id):st=\(st) un=\(un) rcv=\(rc)")
+            }
         }
         io.resume()
         ioTimer = io

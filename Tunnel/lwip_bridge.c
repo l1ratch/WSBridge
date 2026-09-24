@@ -424,6 +424,15 @@ uint32_t lwip_bridge_get_dst_ip(uint32_t conn_id) {
     return c->dc_ip;
 }
 
+// --- Состояние TCP-сессии для диагностики: unacked = snd_nxt - last_ack ---
+void lwip_bridge_conn_stats(uint32_t conn_id, uint32_t *state, uint32_t *unacked, uint32_t *tot_rcved) {
+    conn_t *c = conn_of_id(conn_id);
+    if (!c || !c->pcb) { *state = 0; *unacked = 0; *tot_rcved = 0; return; }
+    *state = (uint32_t)c->pcb->state;
+    *unacked = (uint32_t)(c->pcb->snd_nxt - c->pcb->last_ack);
+    *tot_rcved = (uint32_t)c->pcb->tot_rcved;
+}
+
 // --- Диагностика промаха NAT: ключ lookup'а и первая живая запись таблицы ---
 void lwip_bridge_dbg_nat(uint32_t *key_ip, uint16_t *key_port, uint32_t *dc,
                          uint32_t *nat_ip, uint16_t *nat_port, uint32_t *nat_dc) {

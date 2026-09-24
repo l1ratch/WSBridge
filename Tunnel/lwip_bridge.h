@@ -45,4 +45,7 @@ uint32_t lwip_bridge_get_dst_ip(uint32_t conn_id);
 void lwip_bridge_dbg_nat(uint32_t *key_ip, uint16_t *key_port, uint32_t *dc,
                          uint32_t *nat_ip, uint16_t *nat_port, uint32_t *nat_dc);
 
+// Diagnostics: TCP pcb state, unacked send bytes, total received bytes
+void lwip_bridge_conn_stats(uint32_t conn_id, uint32_t *state, uint32_t *unacked, uint32_t *tot_rcved);
+
 #endif
