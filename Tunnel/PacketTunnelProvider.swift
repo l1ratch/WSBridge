@@ -36,6 +36,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
             NSLog("[WSBridge] tunnel started")
+            EventLog.append("ipc_groups:\(SharedGroup.groupIds().joined(separator: ","))")
             self?.setupLWIP()
             self?.readLoop()
             completionHandler(nil)

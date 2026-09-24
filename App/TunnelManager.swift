@@ -1,6 +1,5 @@
 import Foundation
 import NetworkExtension
-import UIKit
 
 // ponytail: глобальная ссылка для C-callback Darwin notifications
 private var tunnelManagerRef: TunnelManager?
@@ -95,12 +94,14 @@ final class TunnelManager: ObservableObject {
 
     func fetchStats() {
         updateStatsDisplay()
-        // ponytail: журнал из UIPasteboard.general — единственный pasteboard,
-        // видимый между процессами на iOS.
-        if let text = UIPasteboard.general.string, text.contains("ws_") {
+        // ponytail: журнал — файл в общем App Groups контейнере продавца
+        // (ID групп читаем из собственной подписи в рантайме).
+        if let url = SharedGroup.journalURL(),
+           let text = try? String(contentsOf: url, encoding: .utf8), !text.isEmpty {
             journalText = "журнал:\n" + text
         } else {
-            journalText = "журнал недоступен: pasteboard пуст или не содержит событий"
+            let groups = SharedGroup.groupIds()
+            journalText = "журнал недоступен: groups=\(groups.isEmpty ? "нет в подписи" : groups.joined(separator: ","))"
         }
     }
 
