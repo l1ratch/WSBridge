@@ -162,6 +162,7 @@ final class WSClient {
     }
 
     private static func postEvent(_ name: String) {
+        EventLog.append(name)
         let cfName = "com.l1ratch.WSBridge.\(name)" as CFString
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),

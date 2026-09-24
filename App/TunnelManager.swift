@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import NetworkExtension
 
 // ponytail: глобальная ссылка для C-callback Darwin notifications
@@ -93,6 +94,45 @@ final class TunnelManager: ObservableObject {
 
     func fetchStats() {
         updateStatsDisplay()
+        fetchJournal()
+    }
+
+    /// ponytail: журнал событий расширения читается TCP-соединением сквозь
+    /// туннель (198.18.0.3:443) — Darwin-события приложение не получает в suspend.
+    private func fetchJournal() {
+        let conn = NWConnection(host: "198.18.0.3", port: 443, using: .tcp)
+        var finished = false
+        func finish(_ text: String?) {
+            guard !finished else { return }
+            finished = true
+            conn.cancel()
+            if let text {
+                Task { @MainActor in self.stats = "журнал:\n" + text }
+            }
+        }
+        conn.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                var acc = Data()
+                func readMore() {
+                    conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
+                        if let data, !data.isEmpty { acc.append(data) }
+                        if error != nil || isComplete || data == nil {
+                            finish(acc.isEmpty ? nil : String(data: acc, encoding: .utf8))
+                        } else {
+                            readMore()
+                        }
+                    }
+                }
+                readMore()
+            case .failed, .cancelled:
+                finish(nil)
+            default:
+                break
+            }
+        }
+        conn.start(queue: .main)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { finish(nil) }
     }
 
     func reload() async {

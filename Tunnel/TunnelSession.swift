@@ -5,11 +5,11 @@ import Foundation
 ///
 /// ponytail: ВСЕ lwIP-операции (write, close) идут через shared serial-очередь.
 /// WS-колбэки приходят с потока URLSession — без очереди будет гонка.
-final class TunnelSession {
+class TunnelSession {
     let connId: UInt32
     let dcIP: UInt32
-    private let bridge: LWIPBridge
-    private let queue: DispatchQueue
+    let bridge: LWIPBridge
+    let queue: DispatchQueue
     private var ws: WSClient?
     private var splitter: MsgSplitter?
     private var initBuffer = Data()
@@ -70,6 +70,7 @@ final class TunnelSession {
     }
 
     private func postEvent(_ name: String) {
+        EventLog.append(name)
         let cfName = "com.l1ratch.WSBridge.\(name)" as CFString
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
@@ -121,5 +122,25 @@ final class TunnelSession {
         ws?.close()
         ws = nil
         wsConnected = false
+    }
+}
+
+/// Диагностическое соединение: приложение коннектится на 198.18.0.3:443 сквозь
+/// туннель и получает журнал событий расширения. Работает даже когда приложение
+/// было в suspend — журнал живёт в самом расширении.
+final class DiagSession: TunnelSession {
+    func serve() {
+        EventLog.append("diag_open")
+        let text = EventLog.journal() + "\n"
+        _ = bridge.write(connId: connId, data: Data(text.utf8))
+        // Закрываем после записи; очередь гарантирует порядок write→close.
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.bridge.close(connId: self.connId)
+        }
+    }
+
+    override func handleData(_ data: Data) {
+        // Ничего не принимаем — журнал отдаётся сразу при accept.
     }
 }

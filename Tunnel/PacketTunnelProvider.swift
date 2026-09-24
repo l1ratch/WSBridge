@@ -66,6 +66,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func handleAccept(connId: UInt32, dcIP: UInt32) {
         NSLog("[WSBridge] accept conn \(connId) dc=\(dcIP)")
+        // 198.18.0.3 — диагностический адрес: приложение читает журнал событий
+        // TCP-соединением сквозь туннель (Darwin-события в suspend не доходят).
+        if dcIP == 0xC6120003 {
+            let session = DiagSession(connId: connId, dcIP: dcIP, bridge: lwip, queue: lwipQueue)
+            sessions[connId] = session
+            session.serve()
+            return
+        }
         postDarwinEvent("accept")
         let session = TunnelSession(connId: connId, dcIP: dcIP, bridge: lwip, queue: lwipQueue)
         sessions[connId] = session
