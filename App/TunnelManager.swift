@@ -5,13 +5,13 @@ import NetworkExtension
 /// Читает журнал расширения loopback TCP (127.0.0.1:51001, JournalServer).
 /// Nonisolated: колбэки NWConnection приходят с произвольных потоков.
 private final class JournalReader {
-    private let onResult: (Result<String, String>) -> Void
+    private let onText: (String) -> Void
     private var onDone: (() -> Void)?
     private var finished = false
     private var acc = Data()
     private var conn: NWConnection?
 
-    init(onResult: @escaping (Result<String, String>) -> Void) { self.onResult = onResult }
+    init(onText: @escaping (String) -> Void) { self.onText = onText }
 
     func run(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -20,14 +20,14 @@ private final class JournalReader {
         conn.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready: self?.readMore()
-            case .failed(let err): self?.finish(.failure("conn: \(err.localizedDescription)"))
-            case .cancelled: self?.finish(.failure("cancelled"))
+            case .failed(let err): self?.finish("журнал недоступен: conn: \(err.localizedDescription)")
+            case .cancelled: self?.finish("журнал недоступен: cancelled")
             default: break
             }
         }
         conn.start(queue: .global(qos: .userInitiated))
         DispatchQueue.global().asyncAfter(deadline: .now() + 5) { [weak self] in
-            self?.finish(.failure("timeout 5s"))
+            self?.finish("журнал недоступен: timeout 5s")
         }
     }
 
@@ -37,9 +37,9 @@ private final class JournalReader {
             if let data, !data.isEmpty { self.acc.append(data) }
             if error != nil || isComplete || data == nil {
                 if self.acc.isEmpty {
-                    self.finish(.failure("empty response"))
+                    self.finish("журнал недоступен: empty response")
                 } else {
-                    self.finish(.success(String(data: self.acc, encoding: .utf8) ?? "decode error"))
+                    self.finish("журнал:\n" + (String(data: self.acc, encoding: .utf8) ?? "decode error"))
                 }
             } else {
                 self.readMore()
@@ -47,12 +47,12 @@ private final class JournalReader {
         }
     }
 
-    private func finish(_ result: Result<String, String>) {
+    private func finish(_ text: String) {
         if finished { return }
         finished = true
         conn?.cancel()
         conn = nil
-        onResult(result)
+        onText(text)
         onDone?()
         onDone = nil
     }
@@ -156,13 +156,8 @@ final class TunnelManager: ObservableObject {
         // держит там NWListener (JournalServer). Loopback в туннель не попадает,
         // песочницы сокетам между процессами не мешают.
         journalText = "журнал: читаю…"
-        let reader = JournalReader { [weak self] result in
-            Task { @MainActor in
-                switch result {
-                case .success(let text): self?.journalText = "журнал:\n" + text
-                case .failure(let err): self?.journalText = "журнал недоступен: \(err)"
-                }
-            }
+        let reader = JournalReader { [weak self] text in
+            Task { @MainActor in self?.journalText = text }
         }
         Self.currentReader = reader
         reader.run { Self.currentReader = nil }
