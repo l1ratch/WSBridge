@@ -42,6 +42,13 @@ final class LWIPBridge {
                 guard let ctx else { return }
                 let bridge = Unmanaged<LWIPBridge>.fromOpaque(ctx).takeUnretainedValue()
                 let dcIP = lwip_bridge_get_dst_ip(connId)
+                if dcIP == 0 {
+                    var ki: UInt32 = 0, kp: UInt16 = 0, dc: UInt32 = 0
+                    var ni: UInt32 = 0, np: UInt16 = 0, nd: UInt32 = 0
+                    lwip_bridge_dbg_nat(&ki, &kp, &dc, &ni, &np, &nd)
+                    EventLog.append(String(format: "natmiss:key=%08x:%u dc=%08x nat0=%08x:%u->%08x",
+                                           ki, kp, dc, ni, np, nd))
+                }
                 bridge.acceptHandler?(connId, dcIP)
             },
             { connId, data, len, ctx in

@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <machine/endian.h>
 
 #define LWIP_NO_STDINT_H 0
 

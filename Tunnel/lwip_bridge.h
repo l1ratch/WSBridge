@@ -41,4 +41,8 @@ void lwip_bridge_close(uint32_t conn_id);
 // Get the original destination IP for a connection (before rewrite)
 uint32_t lwip_bridge_get_dst_ip(uint32_t conn_id);
 
+// Diagnostics: last accept-lookup key/result + first live NAT entry
+void lwip_bridge_dbg_nat(uint32_t *key_ip, uint16_t *key_port, uint32_t *dc,
+                         uint32_t *nat_ip, uint16_t *nat_port, uint32_t *nat_dc);
+
 #endif

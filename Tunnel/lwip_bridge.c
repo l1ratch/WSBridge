@@ -193,6 +193,17 @@ static err_t tcp_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err) {
     uint16_t client_port = ntohs(newpcb->remote_port);
     uint32_t dc_ip = nat_lookup(client_ip, client_port);
 
+    g_dbg_key_ip = client_ip; g_dbg_key_port = client_port; g_dbg_dc = dc_ip;
+    g_dbg_nat_ip = 0; g_dbg_nat_port = 0; g_dbg_nat_dc = 0;
+    for (int i = 0; i < NAT_MAX; i++) {
+        if (g_nat[i].used) {
+            g_dbg_nat_ip = g_nat[i].client_ip;
+            g_dbg_nat_port = g_nat[i].client_port;
+            g_dbg_nat_dc = g_nat[i].dc_ip;
+            break;
+        }
+    }
+
     int slot = -1;
     for (int i = 0; i < MAX_CONNS; i++) {
         if (!g_conns[i].active) { slot = i; break; }
@@ -408,4 +419,14 @@ uint32_t lwip_bridge_get_dst_ip(uint32_t conn_id) {
     conn_t *c = conn_of_id(conn_id);
     if (!c) return 0;
     return c->dc_ip;
+}
+
+// --- Диагностика промаха NAT: ключ lookup'а и первая живая запись таблицы ---
+static uint32_t g_dbg_key_ip, g_dbg_dc, g_dbg_nat_ip, g_dbg_nat_dc;
+static uint16_t g_dbg_key_port, g_dbg_nat_port;
+
+void lwip_bridge_dbg_nat(uint32_t *key_ip, uint16_t *key_port, uint32_t *dc,
+                         uint32_t *nat_ip, uint16_t *nat_port, uint32_t *nat_dc) {
+    *key_ip = g_dbg_key_ip; *key_port = g_dbg_key_port; *dc = g_dbg_dc;
+    *nat_ip = g_dbg_nat_ip; *nat_port = g_dbg_nat_port; *nat_dc = g_dbg_nat_dc;
 }
