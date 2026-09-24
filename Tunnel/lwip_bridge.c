@@ -186,8 +186,11 @@ static err_t tcp_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err) {
     (void)arg;
     if (err != ERR_OK || !newpcb) return ERR_OK;
 
-    uint32_t client_ip = ip4_addr_get_u32(&newpcb->remote_ip);
-    uint16_t client_port = newpcb->remote_port;
+    // pcb хранит ip/порт в сетевом порядке, а NAT-таблица — в числовом
+    // (big-endian из байтов пакета). Без конверта lookup промахивался и
+    // dc_ip уходил в 0 (pipe-режим слал worker'у dst=0.0.0.0).
+    uint32_t client_ip = ntohl(ip4_addr_get_u32(&newpcb->remote_ip));
+    uint16_t client_port = ntohs(newpcb->remote_port);
     uint32_t dc_ip = nat_lookup(client_ip, client_port);
 
     int slot = -1;
