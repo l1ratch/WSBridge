@@ -16,7 +16,7 @@
 #define LWIP_NETCONN            0
 #define LWIP_SOCKET             0
 
-#define MEMP_NUM_TCP_PCB        16
+#define MEMP_NUM_TCP_PCB        32
 #define MEMP_NUM_TCP_PCB_LISTEN 4
 #define MEMP_NUM_TCP_SEG        64
 #define MEMP_NUM_PBUF           32

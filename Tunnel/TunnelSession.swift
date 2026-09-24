@@ -102,6 +102,7 @@ final class TunnelSession {
     }
 
     private func handleWSClose() {
+        postEvent("ws_close")
         queue.async { [weak self] in
             guard let self else { return }
             self.bridge.close(connId: self.connId)

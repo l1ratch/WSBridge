@@ -222,16 +222,18 @@ static err_t tcp_recv_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t e
         conn_t *c = conn_of_id(id);
         if (c) {
             nat_remove(c->client_ip, c->client_port);
-            // FIN/ошибка: pcb ещё жив, закрыть — иначе утечка слота.
+            // ponytail: только abort — tcp_close оставляет pcb в TIME_WAIT до
+            // 120с, пул (MEMP_NUM_TCP_PCB) иссякает и lwIP глохнет. RST локальному
+            // клиенту безвреден: апстрим всё равно закрыт.
             if (c->pcb) {
                 tcp_recv(c->pcb, NULL);
                 tcp_err(c->pcb, NULL);
-                if (tcp_close(c->pcb) != ERR_OK) tcp_abort(c->pcb);
+                tcp_abort(c->pcb);
             }
             c->active = 0;
             c->pcb = NULL;
         }
-        return ERR_OK;
+        return ERR_ABRT;
     }
     if (g_recv) {
         uint16_t total = p->tot_len;
@@ -390,14 +392,11 @@ void lwip_bridge_close(uint32_t conn_id) {
     conn_t *c = conn_of_id(conn_id);
     if (!c || !c->pcb) return;
     nat_remove(c->client_ip, c->client_port);
-    // ponytail: tcp_close при ERR_MEM оставляет pcb живым навсегда (утечка слота,
-    // 16 pcb кончаются и lwIP глохнет). abort гарантированно освобождает pcb.
+    // ponytail: только abort — мгновенно освобождает pcb, без TIME_WAIT.
     struct tcp_pcb *pcb = c->pcb;
     tcp_recv(pcb, NULL);
     tcp_err(pcb, NULL);
-    if (tcp_close(pcb) != ERR_OK) {
-        tcp_abort(pcb);
-    }
+    tcp_abort(pcb);
     c->active = 0;
     c->pcb = NULL;
 }

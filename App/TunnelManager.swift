@@ -3,7 +3,7 @@ import NetworkExtension
 
 // ponytail: глобальная ссылка для C-callback Darwin notifications
 private var tunnelManagerRef: TunnelManager?
-private let darwinEventNames = ["pkts", "accept", "init", "ws_sent", "ws_try", "ws_up", "ws_recv", "ws_close"]
+private let darwinEventNames = ["pkts", "accept", "init", "ws_sent", "ws_try", "ws_up", "ws_recv", "ws_close", "ws_fail"]
 
 private extension Array {
     subscript(safe index: Int) -> Element? {

@@ -39,6 +39,7 @@ final class WSClient {
     private func tryConnect(domains: [String], path: String, index: Int, onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
         guard index < domains.count else {
             NSLog("[WSBridge] WS: all domains failed")
+            Self.postEvent("ws_fail")
             onClose()
             return
         }
@@ -68,6 +69,7 @@ final class WSClient {
         func fail() {
             guard state.claim() else { return }
             self.task = nil
+            Self.postEvent("ws_fail")
             onClose()
         }
 
