@@ -21,6 +21,8 @@ class TunnelSession {
     private var headLogged = false
     private var upHeadLogged = false
     private var pending: Data?
+    /// Сессия закрыта; слот connId мог уйти новому соединению — писать/закрывать нельзя.
+    private var dead = false
     private static var wfailLogged = 0
 
     init(connId: UInt32, dcIP: UInt32, workerDomain: String?, bridge: LWIPBridge, queue: DispatchQueue) {
@@ -144,7 +146,9 @@ class TunnelSession {
             postEvent("ws_head:c\(connId):\(head)")
         }
         queue.async { [weak self] in
-            guard let self else { return }
+            // Сессия мертва — слот connId мог быть переиспользован новым
+            // соединением; запоздалые байты отравят его шифрпоток.
+            guard let self, !self.dead else { return }
             EventLog.wsDown += UInt64(data.count)
             _ = self.writeOrQueue(data)
         }
@@ -186,15 +190,19 @@ class TunnelSession {
     }
 
     private func handleWSClose() {
-        postEvent("ws_close")
+        postEvent("ws_close:c\(connId)")
         queue.async { [weak self] in
-            guard let self else { return }
+            // Если сессию уже закрыл клиент (handleClose), слот мог уйти
+            // новому соединению — bridge.close убил бы его.
+            guard let self, !self.dead else { return }
+            self.dead = true
             self.bridge.close(connId: self.connId)
         }
     }
 
     /// Соединение закрыто (клиент отключился или ошибка). Вызывается на lwipQueue.
     func handleClose() {
+        dead = true
         postEvent("c\(connId):close")
         ws?.close()
         ws = nil
