@@ -6,13 +6,15 @@ import NetworkExtension
 /// колбэки NWConnection приходят с произвольных потоков.
 private final class JournalReader {
     private let onData: (String) -> Void
+    private var onDone: (() -> Void)?
     private var finished = false
     private var acc = Data()
     private var conn: NWConnection?
 
     init(onData: @escaping (String) -> Void) { self.onData = onData }
 
-    func run() {
+    func run(onDone: @escaping () -> Void) {
+        self.onDone = onDone
         let conn = NWConnection(host: "198.18.0.3", port: 443, using: .tcp)
         self.conn = conn
         conn.stateUpdateHandler = { [weak self] state in
@@ -46,6 +48,8 @@ private final class JournalReader {
         conn?.cancel()
         conn = nil
         if let text { onData(text) }
+        onDone?()
+        onDone = nil
     }
 }
 
@@ -74,6 +78,7 @@ final class TunnelManager: ObservableObject {
 
     private var manager: NETunnelProviderManager?
     private var darwinObserver: CFRunLoopObserver?
+    nonisolated(unsafe) private static var currentReader: JournalReader?
 
     init() {
         tunnelManagerRef = self
@@ -150,7 +155,10 @@ final class TunnelManager: ObservableObject {
         let reader = JournalReader { [weak self] text in
             Task { @MainActor in self?.stats = "журнал:\n" + text }
         }
-        reader.run()
+        // ponytail: держим ссылку, пока чтение не кончит (иначе reader умрёт
+        // сразу после return — все колбэки держат его weakly).
+        Self.currentReader = reader
+        reader.run { Self.currentReader = nil }
     }
 
     func reload() async {
