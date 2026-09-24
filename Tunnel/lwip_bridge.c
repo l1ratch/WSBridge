@@ -190,11 +190,10 @@ static err_t tcp_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err) {
     (void)arg;
     if (err != ERR_OK || !newpcb) return ERR_OK;
 
-    // pcb хранит ip/порт в сетевом порядке, а NAT-таблица — в числовом
-    // (big-endian из байтов пакета). Без конверта lookup промахивался и
-    // dc_ip уходил в 0 (pipe-режим слал worker'у dst=0.0.0.0).
+    // pcb хранит ip в сетевом порядке (ntohl нужен), а порт — уже в host-порядке
+    // (ntohs переворачивал его второй раз: ключи lookup'а шли с младшим байтом FF).
     uint32_t client_ip = ntohl(ip4_addr_get_u32(&newpcb->remote_ip));
-    uint16_t client_port = ntohs(newpcb->remote_port);
+    uint16_t client_port = newpcb->remote_port;
     uint32_t dc_ip = nat_lookup(client_ip, client_port);
 
     g_dbg_key_ip = client_ip; g_dbg_key_port = client_port; g_dbg_dc = dc_ip;
