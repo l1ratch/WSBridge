@@ -396,8 +396,9 @@ void lwip_bridge_poll(void) {
 
 int lwip_bridge_write(uint32_t conn_id, const uint8_t *data, uint16_t len) {
     conn_t *c = conn_of_id(conn_id);
-    if (!c || !c->pcb) return -1;
+    if (!c || !c->pcb) { g_last_write_err = -99; return -1; }
     err_t err = tcp_write(c->pcb, data, len, TCP_WRITE_FLAG_COPY);
+    g_last_write_err = (int)err;
     if (err == ERR_OK) {
         tcp_output(c->pcb);
         return 0;
@@ -425,6 +426,17 @@ uint32_t lwip_bridge_get_dst_ip(uint32_t conn_id) {
 }
 
 // --- Состояние TCP-сессии для диагностики: unacked = snd_nxt - lastack ---
+static int g_last_write_err = 0;
+
+void lwip_bridge_snd_dbg(uint32_t conn_id, int *err, uint32_t *snd_wnd, uint32_t *snd_buf, uint32_t *unacked) {
+    *err = g_last_write_err;
+    conn_t *c = conn_of_id(conn_id);
+    if (!c || !c->pcb) { *snd_wnd = 0; *snd_buf = 0; *unacked = 0; return; }
+    *snd_wnd = (uint32_t)c->pcb->snd_wnd;
+    *snd_buf = (uint32_t)c->pcb->snd_buf;
+    *unacked = (uint32_t)(c->pcb->snd_nxt - c->pcb->lastack);
+}
+
 void lwip_bridge_conn_stats(uint32_t conn_id, uint32_t *state, uint32_t *unacked) {
     conn_t *c = conn_of_id(conn_id);
     if (!c || !c->pcb) { *state = 0; *unacked = 0; return; }

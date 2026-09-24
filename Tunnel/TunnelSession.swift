@@ -20,6 +20,7 @@ class TunnelSession {
     private var bytesDown = 0
     private var headLogged = false
     private var pending: Data?
+    private static var wfailLogged = 0
 
     init(connId: UInt32, dcIP: UInt32, workerDomain: String?, bridge: LWIPBridge, queue: DispatchQueue) {
         self.connId = connId
@@ -156,6 +157,12 @@ class TunnelSession {
         EventLog.writeFails += 1
         pending = data
         EventLog.pendCur += UInt64(data.count)
+        if Self.wfailLogged < 3 {
+            Self.wfailLogged += 1
+            var e: Int32 = 0, w: UInt32 = 0, b: UInt32 = 0, u: UInt32 = 0
+            lwip_bridge_snd_dbg(connId, &e, &w, &b, &u)
+            postEvent("wfail:c\(connId):err=\(e) wnd=\(w) buf=\(b) un=\(u)")
+        }
         return false
     }
 
