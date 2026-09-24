@@ -84,7 +84,7 @@ class TunnelSession {
     private func startPipe() {
         guard let workerDomain else { return }
         let dst = String(format: "%d.%d.%d.%d", (dcIP >> 24) & 255, (dcIP >> 16) & 255, (dcIP >> 8) & 255, dcIP & 255)
-        postEvent("pipe:conn\(connId):\(dst)")
+        postEvent("pipe:conn\(connId):\(dst)" + (dcIP == 0 ? ":raw=0" : ""))
         let ws = WSClient()
         self.ws = ws
         ws.connectPipe(workerDomain: workerDomain, dst: dst, onMessage: { [weak self] data in

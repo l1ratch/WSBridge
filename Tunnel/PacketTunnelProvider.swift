@@ -45,7 +45,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             self?.workerDomain = (wd?.isEmpty == false) ? wd : nil
             EventLog.append("cfg:worker=\(self?.workerDomain ?? "-")")
-            EventLog.append("tunnel_start")
+            let ver = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+            EventLog.append("tunnel_start v\(ver)")
             self?.journalServer.start()
             self?.setupLWIP()
             self?.startTimers()
