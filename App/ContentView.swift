@@ -11,6 +11,9 @@ struct ContentView: View {
                 .foregroundStyle(tunnel.status == .connected ? .green : .secondary)
             Text(statusText)
                 .font(.title3)
+            Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
             Button(tunnel.status == .connected ? "Выключить" : "Включить") {
                 Task { await tunnel.toggle() }
             }

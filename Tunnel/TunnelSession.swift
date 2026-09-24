@@ -16,6 +16,7 @@ class TunnelSession {
     private var initParsed = false
     private var wsConnected = false
     private var dataSent = false
+    private var bytesDown = 0
 
     init(connId: UInt32, dcIP: UInt32, bridge: LWIPBridge, queue: DispatchQueue) {
         self.connId = connId
@@ -49,7 +50,7 @@ class TunnelSession {
 
     private func startWS(parsed: InitParser.ParsedInit) {
         NSLog("[WSBridge] conn \(connId): DC\(parsed.dcId) media=\(parsed.isMedia) test=\(parsed.isTestDC) proto=0x\(String(parsed.protoTag, radix: 16))")
-        postEvent("init")
+        postEvent("init:conn\(connId):DC\(parsed.dcId)")
 
         splitter = MsgSplitter(key: parsed.key, iv: parsed.iv, protoTag: parsed.protoTag)
 
@@ -85,7 +86,7 @@ class TunnelSession {
         // Постится один раз на сессию — иначе спамит уведомлениями.
         if !dataSent {
             dataSent = true
-            postEvent("ws_data")
+            postEvent("ws_data:conn\(connId):\(data.count)B")
         }
         if let splitter {
             let parts = splitter.split(data)
@@ -102,7 +103,8 @@ class TunnelSession {
     /// Данные от kws-гейтвея → клиенту через lwIP.
     /// WS-колбэк приходит с потока URLSession — гоним через очередь.
     private func handleWSData(_ data: Data) {
-        postEvent("ws_recv")
+        bytesDown += data.count
+        postEvent("ws_recv:\(data.count)B")
         queue.async { [weak self] in
             guard let self else { return }
             _ = self.bridge.write(connId: self.connId, data: data)
@@ -129,18 +131,32 @@ class TunnelSession {
 /// туннель и получает журнал событий расширения. Работает даже когда приложение
 /// было в suspend — журнал живёт в самом расширении.
 final class DiagSession: TunnelSession {
+    private var served = false
+
     func serve() {
         EventLog.append("diag_open")
+        // Ждём первый запрос клиента (SYN→ACK→PSH) и только потом отдаём журнал:
+        // запись до установления соединения терялась, а мгновенный abort после
+        // записи рвал чтение RST'ом до доставки данных («журнал недоступен»).
+        queue.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.respond()
+        }
+    }
+
+    private func respond() {
+        guard !served else { return }
+        served = true
         let text = EventLog.journal() + "\n"
         _ = bridge.write(connId: connId, data: Data(text.utf8))
-        // Закрываем после записи; очередь гарантирует порядок write→close.
-        queue.async { [weak self] in
+        // FIN после полусекунды — данные успевают уйти до закрытия.
+        queue.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self else { return }
             self.bridge.close(connId: self.connId)
         }
     }
 
     override func handleData(_ data: Data) {
-        // Ничего не принимаем — журнал отдаётся сразу при accept.
+        // Любой вход: отдаём журнал немедленно.
+        respond()
     }
 }
