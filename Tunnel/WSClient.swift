@@ -49,7 +49,7 @@ final class WSClient {
             return
         }
         NSLog("[WSBridge] WS: trying \(domain)")
-        Self.postEvent("ws_try")
+        Self.postEvent("ws_try:\(domain)")
         var request = URLRequest(url: url)
         request.setValue("binary", forHTTPHeaderField: "Sec-WebSocket-Protocol")
         let wsTask = Self.sharedSession.webSocketTask(with: request)
@@ -69,7 +69,7 @@ final class WSClient {
         func fail() {
             guard state.claim() else { return }
             self.task = nil
-            Self.postEvent("ws_fail")
+            Self.postEvent("ws_fail:\(domain)")
             onClose()
         }
 
@@ -98,6 +98,7 @@ final class WSClient {
                 self.receiveLoop(onMessage: onMessage, onClose: onClose)
             case .failure(let error):
                 NSLog("[WSBridge] WS: \(domain) failed (\(error.localizedDescription)), next")
+                Self.postEvent("ws_err:\(domain):\(error.localizedDescription)")
                 state.delivered ? fail() : advance()
             }
         }
@@ -107,6 +108,7 @@ final class WSClient {
         DispatchQueue.global().asyncAfter(deadline: .now() + 10) {
             guard !state.delivered, state.claim() else { return }
             NSLog("[WSBridge] WS: \(domain) connect timed out, trying next")
+            Self.postEvent("ws_timeout:\(domain)")
             wsTask.cancel(with: .goingAway, reason: nil)
             self.task = nil
             self.tryConnect(domains: domains, path: path, index: index + 1, onMessage: onMessage, onClose: onClose)
