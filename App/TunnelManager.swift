@@ -1,5 +1,6 @@
 import Foundation
 import NetworkExtension
+import UIKit
 
 // ponytail: глобальная ссылка для C-callback Darwin notifications
 private var tunnelManagerRef: TunnelManager?
