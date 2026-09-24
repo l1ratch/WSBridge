@@ -14,6 +14,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var byteCount: UInt64 = 0
     private let startedAt = Date()
     private let lwipQueue = DispatchQueue(label: "com.l1ratch.WSBridge.lwip")
+    private let journalServer = JournalServer()
 
     override func startTunnel(
         options: [String: NSObject]?,
@@ -36,7 +37,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
             NSLog("[WSBridge] tunnel started")
-            EventLog.append("ipc_groups:\(SharedGroup.groupIds().joined(separator: ","))")
+            EventLog.append("tunnel_start")
+            self?.journalServer.start()
             self?.setupLWIP()
             self?.readLoop()
             completionHandler(nil)
@@ -119,6 +121,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     ) {
         NSLog("[WSBridge] tunnel stopped (reason=%ld, pkts=%llu, bytes=%llu)",
               reason.rawValue, packetCount, byteCount)
+        journalServer.stop()
         lwipQueue.sync {
             for (_, session) in sessions { session.handleClose() }
             sessions.removeAll()

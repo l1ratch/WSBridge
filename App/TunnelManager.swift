@@ -1,5 +1,62 @@
 import Foundation
+import Network
 import NetworkExtension
+
+/// Читает журнал расширения loopback TCP (127.0.0.1:51001, JournalServer).
+/// Nonisolated: колбэки NWConnection приходят с произвольных потоков.
+private final class JournalReader {
+    private let onResult: (Result<String, String>) -> Void
+    private var onDone: (() -> Void)?
+    private var finished = false
+    private var acc = Data()
+    private var conn: NWConnection?
+
+    init(onResult: @escaping (Result<String, String>) -> Void) { self.onResult = onResult }
+
+    func run(onDone: @escaping () -> Void) {
+        self.onDone = onDone
+        let conn = NWConnection(host: "127.0.0.1", port: 51001, using: .tcp)
+        self.conn = conn
+        conn.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .ready: self?.readMore()
+            case .failed(let err): self?.finish(.failure("conn: \(err.localizedDescription)"))
+            case .cancelled: self?.finish(.failure("cancelled"))
+            default: break
+            }
+        }
+        conn.start(queue: .global(qos: .userInitiated))
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5) { [weak self] in
+            self?.finish(.failure("timeout 5s"))
+        }
+    }
+
+    private func readMore() {
+        conn?.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self else { return }
+            if let data, !data.isEmpty { self.acc.append(data) }
+            if error != nil || isComplete || data == nil {
+                if self.acc.isEmpty {
+                    self.finish(.failure("empty response"))
+                } else {
+                    self.finish(.success(String(data: self.acc, encoding: .utf8) ?? "decode error"))
+                }
+            } else {
+                self.readMore()
+            }
+        }
+    }
+
+    private func finish(_ result: Result<String, String>) {
+        if finished { return }
+        finished = true
+        conn?.cancel()
+        conn = nil
+        onResult(result)
+        onDone?()
+        onDone = nil
+    }
+}
 
 // ponytail: глобальная ссылка для C-callback Darwin notifications
 private var tunnelManagerRef: TunnelManager?
@@ -27,6 +84,7 @@ final class TunnelManager: ObservableObject {
 
     private var manager: NETunnelProviderManager?
     private var darwinObserver: CFRunLoopObserver?
+    nonisolated(unsafe) private static var currentReader: JournalReader?
 
     init() {
         tunnelManagerRef = self
@@ -94,15 +152,20 @@ final class TunnelManager: ObservableObject {
 
     func fetchStats() {
         updateStatsDisplay()
-        // ponytail: журнал — файл в общем App Groups контейнере продавца
-        // (ID групп читаем из собственной подписи в рантайме).
-        if let url = SharedGroup.journalURL(),
-           let text = try? String(contentsOf: url, encoding: .utf8), !text.isEmpty {
-            journalText = "журнал:\n" + text
-        } else {
-            let groups = SharedGroup.groupIds()
-            journalText = "журнал недоступен: groups=\(groups.isEmpty ? "нет в подписи" : groups.joined(separator: ","))"
+        // ponytail: журнал читается loopback TCP с 127.0.0.1:51001 — расширение
+        // держит там NWListener (JournalServer). Loopback в туннель не попадает,
+        // песочницы сокетам между процессами не мешают.
+        journalText = "журнал: читаю…"
+        let reader = JournalReader { [weak self] result in
+            Task { @MainActor in
+                switch result {
+                case .success(let text): self?.journalText = "журнал:\n" + text
+                case .failure(let err): self?.journalText = "журнал недоступен: \(err)"
+                }
+            }
         }
+        Self.currentReader = reader
+        reader.run { Self.currentReader = nil }
     }
 
     func reload() async {
