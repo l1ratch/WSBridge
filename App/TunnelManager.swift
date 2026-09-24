@@ -3,7 +3,7 @@ import NetworkExtension
 
 // ponytail: глобальная ссылка для C-callback Darwin notifications
 private var tunnelManagerRef: TunnelManager?
-private let darwinEventNames = ["pkts", "accept", "init", "ws_sent", "ws_try", "ws_up", "ws_recv", "ws_close", "ws_fail"]
+private let darwinEventNames = ["pkts", "accept", "init", "ws_sent", "ws_try", "ws_up", "ws_data", "ws_recv", "ws_close", "ws_fail"]
 
 private extension Array {
     subscript(safe index: Int) -> Element? {
@@ -21,6 +21,7 @@ final class TunnelManager: ObservableObject {
     @Published private(set) var lastPacketSignal: Date?
     @Published private(set) var lastEvent: String?
     @Published private(set) var lastEventTime: Date?
+    @Published private(set) var lastAccept: Date?
     @Published var errorMessage: String?
 
     private var manager: NETunnelProviderManager?
@@ -51,10 +52,13 @@ final class TunnelManager: ObservableObject {
                         guard let ref = tunnelManagerRef else { return }
                         let idx = (Int(bitPattern: observer) ?? 1) - 1
                         let eventName = darwinEventNames[safe: idx] ?? "unknown"
-                        // ponytail: pkts не должен перетирать WS-события — иначе
-                        // в UI видно только «pkts» и стадия зависания непонятна.
+                        // ponytail: pkts и accept не должны перетирать WS-стадию —
+                        // пробы SwiftGram плодят accept'ы без продолжения и прячут
+                        // реальную стадию живой сессии.
                         if eventName == "pkts" {
                             ref.lastPacketSignal = Date()
+                        } else if eventName == "accept" {
+                            ref.lastAccept = Date()
                         } else {
                             ref.lastEvent = eventName
                             ref.lastEventTime = Date()
@@ -80,6 +84,9 @@ final class TunnelManager: ObservableObject {
         if let signal = lastPacketSignal {
             let age = Int(Date().timeIntervalSince(signal))
             parts.append(age < 3 ? "трафик течёт" : "последний трафик \(age)с назад")
+        }
+        if let accept = lastAccept {
+            parts.append("accept: \(Int(Date().timeIntervalSince(accept)))с назад")
         }
         stats = parts.isEmpty ? "сигналов от расширения не было" : parts.joined(separator: "\n")
     }

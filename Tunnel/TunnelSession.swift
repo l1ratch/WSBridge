@@ -15,6 +15,7 @@ final class TunnelSession {
     private var initBuffer = Data()
     private var initParsed = false
     private var wsConnected = false
+    private var dataSent = false
 
     init(connId: UInt32, dcIP: UInt32, bridge: LWIPBridge, queue: DispatchQueue) {
         self.connId = connId
@@ -79,6 +80,12 @@ final class TunnelSession {
 
     private func forwardToWS(_ data: Data) {
         guard wsConnected, let ws else { return }
+        // ws_data = клиентские данные (req_pq и т.д.) реально ушли на гейтвей.
+        // Постится один раз на сессию — иначе спамит уведомлениями.
+        if !dataSent {
+            dataSent = true
+            postEvent("ws_data")
+        }
         if let splitter {
             let parts = splitter.split(data)
             if parts.count == 1 {
