@@ -90,6 +90,7 @@ final class TunnelManager: ObservableObject {
 
     @Published private(set) var status: NEVPNStatus = .invalid
     @Published private(set) var stats: String?
+    @Published private(set) var journalText: String?
     @Published private(set) var lastPacketSignal: Date?
     @Published private(set) var lastEvent: String?
     @Published private(set) var lastEventTime: Date?
@@ -175,8 +176,8 @@ final class TunnelManager: ObservableObject {
         let reader = JournalReader { [weak self] result in
             Task { @MainActor in
                 switch result {
-                case .success(let text): self?.stats = "журнал:\n" + text
-                case .failure(let err): self?.stats = "журнал недоступен: \(err.description)"
+                case .success(let text): self?.journalText = "журнал:\n" + text
+                case .failure(let err): self?.journalText = "журнал недоступен: \(err.description)"
                 }
             }
         }

@@ -25,6 +25,16 @@ struct ContentView: View {
                     .textSelection(.enabled)
                     .padding(.horizontal)
             }
+            if let journal = tunnel.journalText {
+                ScrollView {
+                    Text(journal)
+                        .font(.system(.caption2, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 300)
+                .padding(.horizontal)
+            }
             if let errorMessage = tunnel.errorMessage {
                 Text(errorMessage)
                     .font(.footnote)
