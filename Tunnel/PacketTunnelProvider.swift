@@ -95,7 +95,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         io.schedule(deadline: .now() + 15, repeating: 15)
         io.setEventHandler { [weak self] in
             guard let self else { return }
-            EventLog.append("io:in=\(self.packetCount) out=\(EventLog.outPkts) wd=\(EventLog.wsDown) wf=\(EventLog.writeFails)")
+            EventLog.append("io:in=\(self.packetCount) out=\(EventLog.outPkts) wd=\(EventLog.wsDown) wf=\(EventLog.writeFails) up=\(EventLog.upBytes) rx=\(EventLog.rxBytes)")
         }
         io.resume()
         ioTimer = io

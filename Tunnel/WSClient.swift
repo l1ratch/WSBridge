@@ -20,6 +20,7 @@ final class WSClient {
     private var initFrame: Data?
     private var firstRecv = false
     private var upPosted = false
+    private static var sndErrLogged = 0
 
     init() {}
 
@@ -182,7 +183,13 @@ final class WSClient {
     // handshake. Guard на connected был багом: init дропался, гейтвей молчал.
     func send(_ data: Data) {
         task?.send(.data(data)) { error in
-            if let error { NSLog("[WSBridge] WS send error: \(error.localizedDescription)") }
+            if let error {
+                NSLog("[WSBridge] WS send error: \(error.localizedDescription)")
+                if Self.sndErrLogged < 3 {
+                    Self.sndErrLogged += 1
+                    Self.postEvent("ws_snderr:\(error.localizedDescription)")
+                }
+            }
         }
     }
 

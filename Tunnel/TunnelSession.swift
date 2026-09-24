@@ -31,6 +31,7 @@ class TunnelSession {
 
     /// Данные от клиента (SwiftGram) через lwIP. Вызывается на lwipQueue.
     func handleData(_ data: Data) {
+        EventLog.rxBytes += UInt64(data.count)
         // Pipe-режим: собственный CF worker пользователя. Без init-парсинга и
         // сплиттера — сырой поток в WS, worker домостит его до DC:443.
         if workerDomain != nil {
@@ -107,6 +108,7 @@ class TunnelSession {
 
     private func forwardToWS(_ data: Data) {
         guard wsConnected, let ws else { return }
+        EventLog.upBytes += UInt64(data.count)
         // ws_data = клиентские данные (req_pq и т.д.) реально ушли на гейтвей.
         // Постится один раз на сессию — иначе спамит уведомлениями.
         if !dataSent {
