@@ -81,6 +81,10 @@ final class TunnelManager: ObservableObject {
     @Published private(set) var lastEventTime: Date?
     @Published private(set) var lastAccept: Date?
     @Published var errorMessage: String?
+    /// Домен собственного CF worker'а пользователя (pipe-режим). пустой = kws-каскад.
+    @Published var workerDomain: String = UserDefaults.standard.string(forKey: "workerDomain") ?? "" {
+        didSet { UserDefaults.standard.set(workerDomain, forKey: "workerDomain") }
+    }
 
     private var manager: NETunnelProviderManager?
     private var darwinObserver: CFRunLoopObserver?
@@ -175,17 +179,23 @@ final class TunnelManager: ObservableObject {
             if let existing = manager {
                 m = existing
             } else {
-                let proto = NETunnelProviderProtocol()
-                proto.providerBundleIdentifier = Self.providerBundleId
-                proto.serverAddress = "WSBridge"
                 let fresh = NETunnelProviderManager()
-                fresh.protocolConfiguration = proto
                 fresh.localizedDescription = "WSBridge"
                 try await fresh.saveToPreferences()
                 try await fresh.loadFromPreferences()
                 m = fresh
                 manager = m
             }
+            // Конфигурация пересоздаётся при каждом включении: домен worker'а
+            // доезжает до расширения через providerConfiguration.
+            let proto = NETunnelProviderProtocol()
+            proto.providerBundleIdentifier = Self.providerBundleId
+            proto.serverAddress = "WSBridge"
+            let wd = workerDomain.trimmingCharacters(in: .whitespacesAndNewlines)
+            proto.providerConfiguration = wd.isEmpty ? nil : ["worker": wd as NSString]
+            m.protocolConfiguration = proto
+            try await m.saveToPreferences()
+            try await m.loadFromPreferences()
             // NEVPNErrorDomain error 2 (configurationDisabled): менеджер по умолчанию
             // сохраняется выключенным — включаем конфигурацию до старта туннеля.
             if !m.isEnabled {

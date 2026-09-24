@@ -18,6 +18,8 @@ final class WSClient {
     private var task: URLSessionWebSocketTask?
     private var connected = false
     private var initFrame: Data?
+    private var firstRecv = false
+    private var upPosted = false
 
     init() {}
 
@@ -81,7 +83,10 @@ final class WSClient {
                     NSLog("[WSBridge] WS init send error: \(error.localizedDescription)")
                 } else {
                     state.delivered = true
-                    Self.postEvent("ws_up")
+                    if !self.upPosted {
+                        self.upPosted = true
+                        Self.postEvent("ws_up")
+                    }
                 }
             }
         }
@@ -129,11 +134,39 @@ final class WSClient {
         }
     }
 
+    /// Pipe-режим через СОБСТВЕННЫЙ CF worker пользователя: сырые байты в обе
+    /// стороны, worker сам открывает TCP к dst:443 (DC). Ни гейтвея, ни сплиттера:
+    /// init уходит частью потока, границы WS-фреймов не важны.
+    func connectPipe(workerDomain: String, dst: String, onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
+        var comps = URLComponents()
+        comps.scheme = "wss"
+        comps.host = workerDomain
+        comps.path = "/apiws"
+        comps.queryItems = [URLQueryItem(name: "dst", value: dst)]
+        guard let url = comps.url else {
+            Self.postEvent("ws_badurl:\(workerDomain)")
+            onClose()
+            return
+        }
+        Self.postEvent("ws_try:\(workerDomain)")
+        let wsTask = Self.sharedSession.webSocketTask(with: URLRequest(url: url))
+        task = wsTask
+        wsTask.resume()
+        receiveLoop(onMessage: onMessage, onClose: onClose)
+    }
+
     private func receiveLoop(onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
         task?.receive { [weak self] result in
             guard let self else { return }
             switch result {
             case .success(let message):
+                if !firstRecv {
+                    firstRecv = true
+                    if !upPosted {
+                        upPosted = true
+                        Self.postEvent("ws_up")
+                    }
+                }
                 if case .data(let data) = message {
                     onMessage(data)
                 }

@@ -17,6 +17,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let journalServer = JournalServer()
     private var pollTimer: DispatchSourceTimer?
     private var ioTimer: DispatchSourceTimer?
+    private var workerDomain: String?
 
     override func startTunnel(
         options: [String: NSObject]?,
@@ -39,6 +40,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
             NSLog("[WSBridge] tunnel started")
+            let proto = self?.protocolConfiguration as? NETunnelProviderProtocol
+            let wd = (proto?.providerConfiguration?["worker"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            self?.workerDomain = (wd?.isEmpty == false) ? wd : nil
+            EventLog.append("cfg:worker=\(self?.workerDomain ?? "-")")
             EventLog.append("tunnel_start")
             self?.journalServer.start()
             self?.setupLWIP()
@@ -97,7 +103,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func handleAccept(connId: UInt32, dcIP: UInt32) {
         NSLog("[WSBridge] accept conn \(connId) dc=\(dcIP)")
         postDarwinEvent("accept")
-        let session = TunnelSession(connId: connId, dcIP: dcIP, bridge: lwip, queue: lwipQueue)
+        let session = TunnelSession(connId: connId, dcIP: dcIP, workerDomain: workerDomain, bridge: lwip, queue: lwipQueue)
         sessions[connId] = session
     }
 

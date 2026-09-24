@@ -8,6 +8,7 @@ import Foundation
 class TunnelSession {
     let connId: UInt32
     let dcIP: UInt32
+    let workerDomain: String?
     let bridge: LWIPBridge
     let queue: DispatchQueue
     private var ws: WSClient?
@@ -20,15 +21,23 @@ class TunnelSession {
     private var headLogged = false
     private var pending: Data?
 
-    init(connId: UInt32, dcIP: UInt32, bridge: LWIPBridge, queue: DispatchQueue) {
+    init(connId: UInt32, dcIP: UInt32, workerDomain: String?, bridge: LWIPBridge, queue: DispatchQueue) {
         self.connId = connId
         self.dcIP = dcIP
+        self.workerDomain = workerDomain
         self.bridge = bridge
         self.queue = queue
     }
 
     /// Данные от клиента (SwiftGram) через lwIP. Вызывается на lwipQueue.
     func handleData(_ data: Data) {
+        // Pipe-режим: собственный CF worker пользователя. Без init-парсинга и
+        // сплиттера — сырой поток в WS, worker домостит его до DC:443.
+        if workerDomain != nil {
+            if !wsConnected { startPipe() }
+            forwardToWS(data)
+            return
+        }
         if !initParsed {
             initBuffer.append(data)
             if initBuffer.count >= InitParser.handshakeLen {
@@ -70,6 +79,20 @@ class TunnelSession {
 
         wsConnected = true
         postEvent("ws_sent")
+    }
+
+    private func startPipe() {
+        guard let workerDomain else { return }
+        let dst = String(format: "%d.%d.%d.%d", (dcIP >> 24) & 255, (dcIP >> 16) & 255, (dcIP >> 8) & 255, dcIP & 255)
+        postEvent("pipe:conn\(connId):\(dst)")
+        let ws = WSClient()
+        self.ws = ws
+        ws.connectPipe(workerDomain: workerDomain, dst: dst, onMessage: { [weak self] data in
+            self?.handleWSData(data)
+        }, onClose: { [weak self] in
+            self?.handleWSClose()
+        })
+        wsConnected = true
     }
 
     private func postEvent(_ name: String) {
