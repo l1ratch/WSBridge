@@ -5,13 +5,13 @@ import NetworkExtension
 /// Читает журнал расширения TCP-соединением сквозь туннель. Nonisolated:
 /// колбэки NWConnection приходят с произвольных потоков.
 private final class JournalReader {
-    private let onData: (String) -> Void
+    private let onResult: (Result<String, String>) -> Void
     private var onDone: (() -> Void)?
     private var finished = false
     private var acc = Data()
     private var conn: NWConnection?
 
-    init(onData: @escaping (String) -> Void) { self.onData = onData }
+    init(onResult: @escaping (Result<String, String>) -> Void) { self.onResult = onResult }
 
     func run(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -20,13 +20,14 @@ private final class JournalReader {
         conn.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready: self?.readMore()
-            case .failed, .cancelled: self?.finish(nil)
+            case .failed(let err): self?.finish(.failure("conn failed: \(err.localizedDescription)"))
+            case .cancelled: self?.finish(.failure("cancelled"))
             default: break
             }
         }
         conn.start(queue: .global(qos: .userInitiated))
         DispatchQueue.global().asyncAfter(deadline: .now() + 6) { [weak self] in
-            self?.finish(nil)
+            self?.finish(.failure("timeout 6s"))
         }
     }
 
@@ -35,19 +36,23 @@ private final class JournalReader {
             guard let self else { return }
             if let data, !data.isEmpty { self.acc.append(data) }
             if error != nil || isComplete || data == nil {
-                self.finish(self.acc.isEmpty ? nil : String(data: self.acc, encoding: .utf8))
+                if self.acc.isEmpty {
+                    self.finish(.failure("empty response"))
+                } else {
+                    self.finish(.success(String(data: self.acc, encoding: .utf8) ?? "decode error"))
+                }
             } else {
                 self.readMore()
             }
         }
     }
 
-    private func finish(_ text: String?) {
+    private func finish(_ result: Result<String, String>) {
         if finished { return }
         finished = true
         conn?.cancel()
         conn = nil
-        if let text { onData(text) }
+        onResult(result)
         onDone?()
         onDone = nil
     }
@@ -152,8 +157,13 @@ final class TunnelManager: ObservableObject {
     /// ponytail: журнал событий расширения читается TCP-соединением сквозь
     /// туннель (198.18.0.3:443) — Darwin-события приложение не получает в suspend.
     private func fetchJournal() {
-        let reader = JournalReader { [weak self] text in
-            Task { @MainActor in self?.stats = "журнал:\n" + text }
+        let reader = JournalReader { [weak self] result in
+            Task { @MainActor in
+                switch result {
+                case .success(let text): self?.stats = "журнал:\n" + text
+                case .failure(let err): self?.stats = "журнал недоступен: \(err)"
+                }
+            }
         }
         // ponytail: держим ссылку, пока чтение не кончит (иначе reader умрёт
         // сразу после return — все колбэки держат его weakly).
