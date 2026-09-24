@@ -5,7 +5,7 @@ import Network
 /// (127.0.0.1:51001): оба процесса на одном устройстве, никаких entitlements,
 /// песочницы не мешают. Трафик на loopback в туннель не попадает.
 final class JournalServer {
-    static let port: UInt16 = 51001
+    static let port = NWEndpoint.Port(rawValue: 51001)!
     private var listener: NWListener?
 
     func start() {
