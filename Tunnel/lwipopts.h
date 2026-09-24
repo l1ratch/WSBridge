@@ -20,6 +20,11 @@
 #define MEMP_NUM_TCP_PCB_LISTEN 4
 #define MEMP_NUM_TCP_SEG        64
 #define MEMP_NUM_PBUF           32
+// Куча lwIP (MEM): из неё и входные pbuf (PBUF_RAM в lwip_bridge_input),
+// и копии tcp_write. Дефолт 1600 — один сегмент 1460B её исчерпывал:
+// ACK клиента дропались на pbuf_alloc, tcp_write давал ERR_MEM при
+// пустом окне (wfail:err=-1 wnd=65535 buf=16384 un=0).
+#define MEM_SIZE                (128 * 1024)
 #define PBUF_POOL_SIZE          64
 #define PBUF_POOL_BUFSIZE       1600
 
