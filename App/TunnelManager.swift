@@ -95,12 +95,9 @@ final class TunnelManager: ObservableObject {
 
     func fetchStats() {
         updateStatsDisplay()
-        // ponytail: журнал из именованного UIPasteboard — расширение пишет туда
-        // при каждом событии (throttle 2с). TCP-канал не работает: приложение
-        // не может маршрутизировать свой трафик через собственный туннель.
-        let pbName = UIPasteboard.Name("com.l1ratch.WSBridge.journal")
-        if let pb = UIPasteboard(name: pbName, create: false),
-           let text = pb.string, text.contains("ws_") {
+        // ponytail: журнал из UIPasteboard.general — единственный pasteboard,
+        // видимый между процессами на iOS.
+        if let text = UIPasteboard.general.string, text.contains("ws_") {
             journalText = "журнал:\n" + text
         } else {
             journalText = "журнал недоступен: pasteboard пуст или не содержит событий"
