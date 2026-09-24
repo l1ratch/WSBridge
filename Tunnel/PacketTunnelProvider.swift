@@ -15,6 +15,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let startedAt = Date()
     private let lwipQueue = DispatchQueue(label: "com.l1ratch.WSBridge.lwip")
     private let journalServer = JournalServer()
+    private var pollTimer: DispatchSourceTimer?
+    private var ioTimer: DispatchSourceTimer?
 
     override func startTunnel(
         options: [String: NSObject]?,
@@ -40,6 +42,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             EventLog.append("tunnel_start")
             self?.journalServer.start()
             self?.setupLWIP()
+            self?.startTimers()
             self?.readLoop()
             completionHandler(nil)
         }
@@ -59,12 +62,36 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             close: { [weak self] connId in
                 self?.handleClose(connId: connId)
             },
-            sent: { _ in }
+            sent: { [weak self] connId in
+                self?.sessions[connId]?.handleSent()
+            }
         )
     }
 
     private func writePacket(_ data: Data) {
+        EventLog.outPkts += 1
         packetFlow.writePackets([data], withProtocols: [NSNumber(value: AF_INET)])
+    }
+
+    /// ponytail: lwIP NO_SYS=1 требует периодического sys_check_timeouts.
+    /// Раньше poll() крутился только на входящих пакетах — когда клиент затихал
+    /// в ожидании ответа, ретрансмиты зависших сегментов не происходили никогда
+    /// и сессия висела вечно (ровно картина «ws_recv есть, а ТГ стоит»).
+    private func startTimers() {
+        let poll = DispatchSource.makeTimerSource(queue: lwipQueue)
+        poll.schedule(deadline: .now() + .milliseconds(250), repeating: .milliseconds(250))
+        poll.setEventHandler { [weak self] in self?.lwip.poll() }
+        poll.resume()
+        pollTimer = poll
+
+        let io = DispatchSource.makeTimerSource(queue: lwipQueue)
+        io.schedule(deadline: .now() + 15, repeating: 15)
+        io.setEventHandler { [weak self] in
+            guard let self else { return }
+            EventLog.append("io:in=\(self.packetCount) out=\(EventLog.outPkts) wd=\(EventLog.wsDown) wf=\(EventLog.writeFails)")
+        }
+        io.resume()
+        ioTimer = io
     }
 
     private func handleAccept(connId: UInt32, dcIP: UInt32) {
@@ -122,6 +149,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         NSLog("[WSBridge] tunnel stopped (reason=%ld, pkts=%llu, bytes=%llu)",
               reason.rawValue, packetCount, byteCount)
         journalServer.stop()
+        pollTimer?.cancel(); pollTimer = nil
+        ioTimer?.cancel(); ioTimer = nil
         lwipQueue.sync {
             for (_, session) in sessions { session.handleClose() }
             sessions.removeAll()

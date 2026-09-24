@@ -18,6 +18,7 @@ class TunnelSession {
     private var dataSent = false
     private var bytesDown = 0
     private var headLogged = false
+    private var pending: Data?
 
     init(connId: UInt32, dcIP: UInt32, bridge: LWIPBridge, queue: DispatchQueue) {
         self.connId = connId
@@ -104,7 +105,6 @@ class TunnelSession {
     /// Данные от kws-гейтвея → клиенту через lwIP.
     /// WS-колбэк приходит с потока URLSession — гоним через очередь.
     private func handleWSData(_ data: Data) {
-        bytesDown += data.count
         postEvent("ws_recv:\(data.count)B")
         if !headLogged {
             headLogged = true
@@ -113,7 +113,32 @@ class TunnelSession {
         }
         queue.async { [weak self] in
             guard let self else { return }
-            _ = self.bridge.write(connId: self.connId, data: data)
+            EventLog.wsDown += UInt64(data.count)
+            _ = self.writeOrQueue(data)
+        }
+    }
+
+    /// ponytail: tcp_write может вернуть ERR_MEM (окно/буфер забиты). Раньше байты
+    /// просто дропались — дыра в шифрпотоке фатальна для MTProto. Теперь очередь:
+    /// дожидается sent-колбэка и дописывает.
+    private func writeOrQueue(_ data: Data) -> Bool {
+        if pending != nil {
+            pending?.append(data)
+            return false
+        }
+        if bridge.write(connId: connId, data: data) { return true }
+        EventLog.writeFails += 1
+        pending = data
+        return false
+    }
+
+    /// Освободилось место в send-буфере lwIP — дописываем очередь. Вызывается на lwipQueue.
+    func handleSent() {
+        guard let p = pending else { return }
+        pending = nil
+        if !bridge.write(connId: connId, data: p) {
+            EventLog.writeFails += 1
+            pending = p
         }
     }
 

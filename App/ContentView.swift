@@ -1,5 +1,6 @@
 import SwiftUI
 import NetworkExtension
+import UIKit
 
 struct ContentView: View {
     @StateObject private var tunnel = TunnelManager()
@@ -37,6 +38,10 @@ struct ContentView: View {
                 }
                 .frame(maxHeight: 300)
                 .padding(.horizontal)
+                Button("Скопировать журнал") {
+                    UIPasteboard.general.string = journal
+                }
+                .buttonStyle(.bordered)
             }
             if let errorMessage = tunnel.errorMessage {
                 Text(errorMessage)

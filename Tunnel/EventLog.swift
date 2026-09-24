@@ -11,6 +11,11 @@ enum EventLog {
         return f
     }()
 
+    // Счётчики io-строки журнала (пишутся с lwipQueue)
+    static var outPkts: UInt64 = 0
+    static var wsDown: UInt64 = 0
+    static var writeFails: UInt64 = 0
+
     static func append(_ name: String) {
         lock.lock(); defer { lock.unlock() }
         entries.append((name, Date()))
