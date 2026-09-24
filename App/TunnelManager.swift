@@ -4,14 +4,29 @@ import NetworkExtension
 
 /// Читает журнал расширения TCP-соединением сквозь туннель. Nonisolated:
 /// колбэки NWConnection приходят с произвольных потоков.
+private enum JournalError: Error, CustomStringConvertible {
+    case connFailed(String)
+    case cancelled
+    case timeout
+    case empty
+    var description: String {
+        switch self {
+        case .connFailed(let s): return "conn failed: \(s)"
+        case .cancelled: return "cancelled"
+        case .timeout: return "timeout 6s"
+        case .empty: return "empty response"
+        }
+    }
+}
+
 private final class JournalReader {
-    private let onResult: (Result<String, String>) -> Void
+    private let onResult: (Result<String, JournalError>) -> Void
     private var onDone: (() -> Void)?
     private var finished = false
     private var acc = Data()
     private var conn: NWConnection?
 
-    init(onResult: @escaping (Result<String, String>) -> Void) { self.onResult = onResult }
+    init(onResult: @escaping (Result<String, JournalError>) -> Void) { self.onResult = onResult }
 
     func run(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -20,14 +35,14 @@ private final class JournalReader {
         conn.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready: self?.readMore()
-            case .failed(let err): self?.finish(.failure("conn failed: \(err.localizedDescription)"))
-            case .cancelled: self?.finish(.failure("cancelled"))
+            case .failed(let err): self?.finish(.failure(.connFailed(err.localizedDescription)))
+            case .cancelled: self?.finish(.failure(.cancelled))
             default: break
             }
         }
         conn.start(queue: .global(qos: .userInitiated))
         DispatchQueue.global().asyncAfter(deadline: .now() + 6) { [weak self] in
-            self?.finish(.failure("timeout 6s"))
+            self?.finish(.failure(.timeout))
         }
     }
 
@@ -37,7 +52,7 @@ private final class JournalReader {
             if let data, !data.isEmpty { self.acc.append(data) }
             if error != nil || isComplete || data == nil {
                 if self.acc.isEmpty {
-                    self.finish(.failure("empty response"))
+                    self.finish(.failure(.empty))
                 } else {
                     self.finish(.success(String(data: self.acc, encoding: .utf8) ?? "decode error"))
                 }
@@ -47,7 +62,7 @@ private final class JournalReader {
         }
     }
 
-    private func finish(_ result: Result<String, String>) {
+    private func finish(_ result: Result<String, JournalError>) {
         if finished { return }
         finished = true
         conn?.cancel()
@@ -161,7 +176,7 @@ final class TunnelManager: ObservableObject {
             Task { @MainActor in
                 switch result {
                 case .success(let text): self?.stats = "журнал:\n" + text
-                case .failure(let err): self?.stats = "журнал недоступен: \(err)"
+                case .failure(let err): self?.stats = "журнал недоступен: \(err.description)"
                 }
             }
         }
