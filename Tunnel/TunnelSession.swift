@@ -17,6 +17,7 @@ class TunnelSession {
     private var wsConnected = false
     private var dataSent = false
     private var bytesDown = 0
+    private var headLogged = false
 
     init(connId: UInt32, dcIP: UInt32, bridge: LWIPBridge, queue: DispatchQueue) {
         self.connId = connId
@@ -105,6 +106,11 @@ class TunnelSession {
     private func handleWSData(_ data: Data) {
         bytesDown += data.count
         postEvent("ws_recv:\(data.count)B")
+        if !headLogged {
+            headLogged = true
+            let head = data.prefix(16).map { String(format: "%02x", $0) }.joined()
+            postEvent("ws_head:\(head)")
+        }
         queue.async { [weak self] in
             guard let self else { return }
             _ = self.bridge.write(connId: self.connId, data: data)
