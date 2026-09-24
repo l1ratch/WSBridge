@@ -1,77 +1,5 @@
 import Foundation
-import Network
 import NetworkExtension
-
-/// Читает журнал расширения TCP-соединением сквозь туннель. Nonisolated:
-/// колбэки NWConnection приходят с произвольных потоков.
-private enum JournalError: Error, CustomStringConvertible {
-    case connFailed(String)
-    case cancelled
-    case timeout
-    case empty
-    var description: String {
-        switch self {
-        case .connFailed(let s): return "conn failed: \(s)"
-        case .cancelled: return "cancelled"
-        case .timeout: return "timeout 6s"
-        case .empty: return "empty response"
-        }
-    }
-}
-
-private final class JournalReader {
-    private let onResult: (Result<String, JournalError>) -> Void
-    private var onDone: (() -> Void)?
-    private var finished = false
-    private var acc = Data()
-    private var conn: NWConnection?
-
-    init(onResult: @escaping (Result<String, JournalError>) -> Void) { self.onResult = onResult }
-
-    func run(onDone: @escaping () -> Void) {
-        self.onDone = onDone
-        let conn = NWConnection(host: "198.18.0.3", port: 443, using: .tcp)
-        self.conn = conn
-        conn.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready: self?.readMore()
-            case .failed(let err): self?.finish(.failure(.connFailed(err.localizedDescription)))
-            case .cancelled: self?.finish(.failure(.cancelled))
-            default: break
-            }
-        }
-        conn.start(queue: .global(qos: .userInitiated))
-        DispatchQueue.global().asyncAfter(deadline: .now() + 6) { [weak self] in
-            self?.finish(.failure(.timeout))
-        }
-    }
-
-    private func readMore() {
-        conn?.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
-            guard let self else { return }
-            if let data, !data.isEmpty { self.acc.append(data) }
-            if error != nil || isComplete || data == nil {
-                if self.acc.isEmpty {
-                    self.finish(.failure(.empty))
-                } else {
-                    self.finish(.success(String(data: self.acc, encoding: .utf8) ?? "decode error"))
-                }
-            } else {
-                self.readMore()
-            }
-        }
-    }
-
-    private func finish(_ result: Result<String, JournalError>) {
-        if finished { return }
-        finished = true
-        conn?.cancel()
-        conn = nil
-        onResult(result)
-        onDone?()
-        onDone = nil
-    }
-}
 
 // ponytail: глобальная ссылка для C-callback Darwin notifications
 private var tunnelManagerRef: TunnelManager?
@@ -99,7 +27,6 @@ final class TunnelManager: ObservableObject {
 
     private var manager: NETunnelProviderManager?
     private var darwinObserver: CFRunLoopObserver?
-    nonisolated(unsafe) private static var currentReader: JournalReader?
 
     init() {
         tunnelManagerRef = self
@@ -167,24 +94,16 @@ final class TunnelManager: ObservableObject {
 
     func fetchStats() {
         updateStatsDisplay()
-        fetchJournal()
-    }
-
-    /// ponytail: журнал событий расширения читается TCP-соединением сквозь
-    /// туннель (198.18.0.3:443) — Darwin-события приложение не получает в suspend.
-    private func fetchJournal() {
-        let reader = JournalReader { [weak self] result in
-            Task { @MainActor in
-                switch result {
-                case .success(let text): self?.journalText = "журнал:\n" + text
-                case .failure(let err): self?.journalText = "журнал недоступен: \(err.description)"
-                }
-            }
+        // ponytail: журнал из именованного UIPasteboard — расширение пишет туда
+        // при каждом событии (throttle 2с). TCP-канал не работает: приложение
+        // не может маршрутизировать свой трафик через собственный туннель.
+        let pbName = UIPasteboard.Name("com.l1ratch.WSBridge.journal")
+        if let pb = UIPasteboard(name: pbName, create: false),
+           let text = pb.string, text.contains("ws_") {
+            journalText = "журнал:\n" + text
+        } else {
+            journalText = "журнал недоступен: pasteboard пуст или не содержит событий"
         }
-        // ponytail: держим ссылку, пока чтение не кончит (иначе reader умрёт
-        // сразу после return — все колбэки держат его weakly).
-        Self.currentReader = reader
-        reader.run { Self.currentReader = nil }
     }
 
     func reload() async {

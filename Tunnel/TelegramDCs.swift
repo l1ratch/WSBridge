@@ -11,9 +11,6 @@ enum TelegramDCs {
             NEIPv4Route(destinationAddress: "149.154.0.0", subnetMask: "255.255.0.0"),
             NEIPv4Route(destinationAddress: "91.108.0.0", subnetMask: "255.255.0.0"),
             NEIPv4Route(destinationAddress: "91.105.192.0", subnetMask: "255.255.255.0"),
-            // Диагностический адрес: приложение читает журнал расширения
-            // TCP-соединением сквозь туннель (работает даже в suspend).
-            NEIPv4Route(destinationAddress: "198.18.0.3", subnetMask: "255.255.255.255"),
         ]
     }
 

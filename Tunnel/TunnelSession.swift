@@ -126,37 +126,3 @@ class TunnelSession {
         wsConnected = false
     }
 }
-
-/// Диагностическое соединение: приложение коннектится на 198.18.0.3:443 сквозь
-/// туннель и получает журнал событий расширения. Работает даже когда приложение
-/// было в suspend — журнал живёт в самом расширении.
-final class DiagSession: TunnelSession {
-    private var served = false
-
-    func serve() {
-        EventLog.append("diag_open")
-        // Ждём первый запрос клиента (SYN→ACK→PSH) и только потом отдаём журнал:
-        // запись до установления соединения терялась, а мгновенный abort после
-        // записи рвал чтение RST'ом до доставки данных («журнал недоступен»).
-        queue.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.respond()
-        }
-    }
-
-    private func respond() {
-        guard !served else { return }
-        served = true
-        let text = EventLog.journal() + "\n"
-        _ = bridge.write(connId: connId, data: Data(text.utf8))
-        // FIN после полусекунды — данные успевают уйти до закрытия.
-        queue.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self else { return }
-            self.bridge.close(connId: self.connId)
-        }
-    }
-
-    override func handleData(_ data: Data) {
-        // Любой вход: отдаём журнал немедленно.
-        respond()
-    }
-}
