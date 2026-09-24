@@ -2,6 +2,53 @@ import Foundation
 import Network
 import NetworkExtension
 
+/// Читает журнал расширения TCP-соединением сквозь туннель. Nonisolated:
+/// колбэки NWConnection приходят с произвольных потоков.
+private final class JournalReader {
+    private let onData: (String) -> Void
+    private var finished = false
+    private var acc = Data()
+    private var conn: NWConnection?
+
+    init(onData: @escaping (String) -> Void) { self.onData = onData }
+
+    func run() {
+        let conn = NWConnection(host: "198.18.0.3", port: 443, using: .tcp)
+        self.conn = conn
+        conn.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .ready: self?.readMore()
+            case .failed, .cancelled: self?.finish(nil)
+            default: break
+            }
+        }
+        conn.start(queue: .global(qos: .userInitiated))
+        DispatchQueue.global().asyncAfter(deadline: .now() + 6) { [weak self] in
+            self?.finish(nil)
+        }
+    }
+
+    private func readMore() {
+        conn?.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self else { return }
+            if let data, !data.isEmpty { self.acc.append(data) }
+            if error != nil || isComplete || data == nil {
+                self.finish(self.acc.isEmpty ? nil : String(data: self.acc, encoding: .utf8))
+            } else {
+                self.readMore()
+            }
+        }
+    }
+
+    private func finish(_ text: String?) {
+        if finished { return }
+        finished = true
+        conn?.cancel()
+        conn = nil
+        if let text { onData(text) }
+    }
+}
+
 // ponytail: глобальная ссылка для C-callback Darwin notifications
 private var tunnelManagerRef: TunnelManager?
 private let darwinEventNames = ["pkts", "accept", "init", "ws_sent", "ws_try", "ws_up", "ws_data", "ws_recv", "ws_close", "ws_fail"]
@@ -100,39 +147,10 @@ final class TunnelManager: ObservableObject {
     /// ponytail: журнал событий расширения читается TCP-соединением сквозь
     /// туннель (198.18.0.3:443) — Darwin-события приложение не получает в suspend.
     private func fetchJournal() {
-        let conn = NWConnection(host: "198.18.0.3", port: 443, using: .tcp)
-        var finished = false
-        func finish(_ text: String?) {
-            guard !finished else { return }
-            finished = true
-            conn.cancel()
-            if let text {
-                Task { @MainActor in self.stats = "журнал:\n" + text }
-            }
+        let reader = JournalReader { [weak self] text in
+            Task { @MainActor in self?.stats = "журнал:\n" + text }
         }
-        conn.stateUpdateHandler = { state in
-            switch state {
-            case .ready:
-                var acc = Data()
-                func readMore() {
-                    conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
-                        if let data, !data.isEmpty { acc.append(data) }
-                        if error != nil || isComplete || data == nil {
-                            finish(acc.isEmpty ? nil : String(data: acc, encoding: .utf8))
-                        } else {
-                            readMore()
-                        }
-                    }
-                }
-                readMore()
-            case .failed, .cancelled:
-                finish(nil)
-            default:
-                break
-            }
-        }
-        conn.start(queue: .main)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { finish(nil) }
+        reader.run()
     }
 
     func reload() async {
