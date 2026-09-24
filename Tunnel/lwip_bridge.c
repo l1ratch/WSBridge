@@ -31,6 +31,7 @@ static nat_entry_t g_nat[NAT_MAX];
 // Диагностика промаха NAT: ключ последнего lookup'а и первая живая запись
 static uint32_t g_dbg_key_ip, g_dbg_dc, g_dbg_nat_ip, g_dbg_nat_dc;
 static uint16_t g_dbg_key_port, g_dbg_nat_port;
+static int g_last_write_err = 0;
 
 static void nat_add(uint32_t client_ip, uint16_t client_port, uint32_t dc_ip) {
     // Reuse existing entry or find a free slot
@@ -426,8 +427,6 @@ uint32_t lwip_bridge_get_dst_ip(uint32_t conn_id) {
 }
 
 // --- Состояние TCP-сессии для диагностики: unacked = snd_nxt - lastack ---
-static int g_last_write_err = 0;
-
 void lwip_bridge_snd_dbg(uint32_t conn_id, int *err, uint32_t *snd_wnd, uint32_t *snd_buf, uint32_t *unacked) {
     *err = g_last_write_err;
     conn_t *c = conn_of_id(conn_id);
