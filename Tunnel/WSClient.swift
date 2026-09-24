@@ -91,7 +91,7 @@ final class WSClient {
                     state.delivered = true
                     if !self.upPosted {
                         self.upPosted = true
-                        post("ws_up")
+                        self.post("ws_up")
                     }
                 }
             }
@@ -119,7 +119,7 @@ final class WSClient {
         DispatchQueue.global().asyncAfter(deadline: .now() + 10) {
             guard !state.delivered, state.claim() else { return }
             NSLog("[WSBridge] WS: \(domain) connect timed out, trying next")
-            post("ws_timeout:\(domain)")
+            self.post("ws_timeout:\(domain)")
             wsTask.cancel(with: .goingAway, reason: nil)
             self.task = nil
             self.tryConnect(domains: domains, path: path, index: index + 1, onMessage: onMessage, onClose: onClose)
@@ -192,7 +192,7 @@ final class WSClient {
                 NSLog("[WSBridge] WS send error: \(error.localizedDescription)")
                 if Self.sndErrLogged < 3 {
                     Self.sndErrLogged += 1
-                    post("ws_snderr:\(error.localizedDescription)")
+                    self.post("ws_snderr:\(error.localizedDescription)")
                 }
             }
         }
