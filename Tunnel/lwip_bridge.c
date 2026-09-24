@@ -28,6 +28,10 @@ typedef struct {
 } nat_entry_t;
 static nat_entry_t g_nat[NAT_MAX];
 
+// Диагностика промаха NAT: ключ последнего lookup'а и первая живая запись
+static uint32_t g_dbg_key_ip, g_dbg_dc, g_dbg_nat_ip, g_dbg_nat_dc;
+static uint16_t g_dbg_key_port, g_dbg_nat_port;
+
 static void nat_add(uint32_t client_ip, uint16_t client_port, uint32_t dc_ip) {
     // Reuse existing entry or find a free slot
     for (int i = 0; i < NAT_MAX; i++) {
@@ -422,9 +426,6 @@ uint32_t lwip_bridge_get_dst_ip(uint32_t conn_id) {
 }
 
 // --- Диагностика промаха NAT: ключ lookup'а и первая живая запись таблицы ---
-static uint32_t g_dbg_key_ip, g_dbg_dc, g_dbg_nat_ip, g_dbg_nat_dc;
-static uint16_t g_dbg_key_port, g_dbg_nat_port;
-
 void lwip_bridge_dbg_nat(uint32_t *key_ip, uint16_t *key_port, uint32_t *dc,
                          uint32_t *nat_ip, uint16_t *nat_port, uint32_t *nat_dc) {
     *key_ip = g_dbg_key_ip; *key_port = g_dbg_key_port; *dc = g_dbg_dc;
