@@ -70,7 +70,7 @@ class TunnelSession {
         // каскада, поэтому передаём сюда, а не отдельным send() после connect().
         let initData = Data(initBuffer.prefix(InitParser.handshakeLen))
 
-        let ws = WSClient()
+        let ws = WSClient(tag: "c\(connId)")
         self.ws = ws
         ws.connect(dc: parsed.dcId, isTestDC: parsed.isTestDC, initFrame: initData, onMessage: { [weak self] data in
             self?.handleWSData(data)
@@ -86,7 +86,7 @@ class TunnelSession {
         guard let workerDomain else { return }
         let dst = String(format: "%d.%d.%d.%d", (dcIP >> 24) & 255, (dcIP >> 16) & 255, (dcIP >> 8) & 255, dcIP & 255)
         postEvent("pipe:conn\(connId):\(dst)" + (dcIP == 0 ? ":raw=0" : ""))
-        let ws = WSClient()
+        let ws = WSClient(tag: "c\(connId)")
         self.ws = ws
         ws.connectPipe(workerDomain: workerDomain, dst: dst, onMessage: { [weak self] data in
             self?.handleWSData(data)
@@ -130,11 +130,11 @@ class TunnelSession {
     /// Данные от kws-гейтвея → клиенту через lwIP.
     /// WS-колбэк приходит с потока URLSession — гоним через очередь.
     private func handleWSData(_ data: Data) {
-        postEvent("ws_recv:\(data.count)B")
+        postEvent("ws_recv:c\(connId):\(data.count)B")
         if !headLogged {
             headLogged = true
             let head = data.prefix(16).map { String(format: "%02x", $0) }.joined()
-            postEvent("ws_head:\(head)")
+            postEvent("ws_head:c\(connId):\(head)")
         }
         queue.async { [weak self] in
             guard let self else { return }
@@ -149,19 +149,24 @@ class TunnelSession {
     private func writeOrQueue(_ data: Data) -> Bool {
         if pending != nil {
             pending?.append(data)
+            EventLog.pendCur += UInt64(data.count)
             return false
         }
         if bridge.write(connId: connId, data: data) { return true }
         EventLog.writeFails += 1
         pending = data
+        EventLog.pendCur += UInt64(data.count)
         return false
     }
 
     /// Освободилось место в send-буфере lwIP — дописываем очередь. Вызывается на lwipQueue.
     func handleSent() {
+        EventLog.sentCb += 1
         guard let p = pending else { return }
         pending = nil
-        if !bridge.write(connId: connId, data: p) {
+        if bridge.write(connId: connId, data: p) {
+            EventLog.pendCur -= UInt64(p.count)
+        } else {
             EventLog.writeFails += 1
             pending = p
         }

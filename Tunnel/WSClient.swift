@@ -21,8 +21,13 @@ final class WSClient {
     private var firstRecv = false
     private var upPosted = false
     private static var sndErrLogged = 0
+    private let tag: String
 
-    init() {}
+    init(tag: String = "") { self.tag = tag }
+
+    private func post(_ name: String) {
+        Self.postEvent(tag.isEmpty ? name : "\(tag):\(name)")
+    }
 
     /// Подключается к kws-гейтвею. Пробует CF-домены, потом web.telegram.org.
     /// initFrame (64-байтовый MTProto init) шлётся первым фреймом на КАЖДОМ
@@ -42,7 +47,7 @@ final class WSClient {
     private func tryConnect(domains: [String], path: String, index: Int, onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
         guard index < domains.count else {
             NSLog("[WSBridge] WS: all domains failed")
-            Self.postEvent("ws_fail")
+            post("ws_fail")
             onClose()
             return
         }
@@ -52,7 +57,7 @@ final class WSClient {
             return
         }
         NSLog("[WSBridge] WS: trying \(domain)")
-        Self.postEvent("ws_try:\(domain)")
+        post("ws_try:\(domain)")
         var request = URLRequest(url: url)
         request.setValue("binary", forHTTPHeaderField: "Sec-WebSocket-Protocol")
         let wsTask = Self.sharedSession.webSocketTask(with: request)
@@ -72,7 +77,7 @@ final class WSClient {
         func fail() {
             guard state.claim() else { return }
             self.task = nil
-            Self.postEvent("ws_fail:\(domain)")
+            post("ws_fail:\(domain)")
             onClose()
         }
 
@@ -86,7 +91,7 @@ final class WSClient {
                     state.delivered = true
                     if !self.upPosted {
                         self.upPosted = true
-                        Self.postEvent("ws_up")
+                        post("ws_up")
                     }
                 }
             }
@@ -104,7 +109,7 @@ final class WSClient {
                 self.receiveLoop(onMessage: onMessage, onClose: onClose)
             case .failure(let error):
                 NSLog("[WSBridge] WS: \(domain) failed (\(error.localizedDescription)), next")
-                Self.postEvent("ws_err:\(domain):\(error.localizedDescription)")
+                post("ws_err:\(domain):\(error.localizedDescription)")
                 state.delivered ? fail() : advance()
             }
         }
@@ -114,7 +119,7 @@ final class WSClient {
         DispatchQueue.global().asyncAfter(deadline: .now() + 10) {
             guard !state.delivered, state.claim() else { return }
             NSLog("[WSBridge] WS: \(domain) connect timed out, trying next")
-            Self.postEvent("ws_timeout:\(domain)")
+            post("ws_timeout:\(domain)")
             wsTask.cancel(with: .goingAway, reason: nil)
             self.task = nil
             self.tryConnect(domains: domains, path: path, index: index + 1, onMessage: onMessage, onClose: onClose)
@@ -145,11 +150,11 @@ final class WSClient {
         comps.path = "/apiws"
         comps.queryItems = [URLQueryItem(name: "dst", value: dst)]
         guard let url = comps.url else {
-            Self.postEvent("ws_badurl:\(workerDomain)")
+            post("ws_badurl:\(workerDomain)")
             onClose()
             return
         }
-        Self.postEvent("ws_try:\(workerDomain)")
+        post("ws_try:\(workerDomain)")
         let wsTask = Self.sharedSession.webSocketTask(with: URLRequest(url: url))
         task = wsTask
         wsTask.resume()
@@ -165,7 +170,7 @@ final class WSClient {
                     firstRecv = true
                     if !upPosted {
                         upPosted = true
-                        Self.postEvent("ws_up")
+                        post("ws_up")
                     }
                 }
                 if case .data(let data) = message {
@@ -187,7 +192,7 @@ final class WSClient {
                 NSLog("[WSBridge] WS send error: \(error.localizedDescription)")
                 if Self.sndErrLogged < 3 {
                     Self.sndErrLogged += 1
-                    Self.postEvent("ws_snderr:\(error.localizedDescription)")
+                    post("ws_snderr:\(error.localizedDescription)")
                 }
             }
         }

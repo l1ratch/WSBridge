@@ -17,6 +17,8 @@ enum EventLog {
     static var writeFails: UInt64 = 0
     static var upBytes: UInt64 = 0
     static var rxBytes: UInt64 = 0
+    static var pendCur: UInt64 = 0
+    static var sentCb: UInt64 = 0
 
     static func append(_ name: String) {
         lock.lock(); defer { lock.unlock() }
