@@ -222,9 +222,9 @@ static err_t tcp_recv_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t e
         conn_t *c = conn_of_id(id);
         if (c) {
             nat_remove(c->client_ip, c->client_port);
-            // ponytail: только abort — tcp_close оставляет pcb в TIME_WAIT до
-            // 120с, пул (MEMP_NUM_TCP_PCB) иссякает и lwIP глохнет. RST локальному
-            // клиенту безвреден: апстрим всё равно закрыт.
+            // FIN (ERR_OK, p==NULL) или ERR_MEM: pcb ещё жив — abort освобождает
+            // слот мгновенно (tcp_close оставил бы TIME_WAIT на 120с, пул иссяк).
+            // Если pcb уже освобождён (err_cb/lwip_bridge_close), он NULL — не трогаем.
             if (c->pcb) {
                 tcp_recv(c->pcb, NULL);
                 tcp_err(c->pcb, NULL);
