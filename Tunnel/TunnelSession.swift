@@ -19,6 +19,7 @@ class TunnelSession {
     private var dataSent = false
     private var bytesDown = 0
     private var headLogged = false
+    private var upHeadLogged = false
     private var pending: Data?
     private static var wfailLogged = 0
 
@@ -33,6 +34,11 @@ class TunnelSession {
     /// Данные от клиента (SwiftGram) через lwIP. Вызывается на lwipQueue.
     func handleData(_ data: Data) {
         EventLog.rxBytes += UInt64(data.count)
+        if !upHeadLogged {
+            upHeadLogged = true
+            let head = data.prefix(96).map { String(format: "%02x", $0) }.joined()
+            postEvent("uphead:c\(connId):\(data.count):\(head)")
+        }
         // Pipe-режим: собственный CF worker пользователя. Без init-парсинга и
         // сплиттера — сырой поток в WS, worker домостит его до DC:443.
         if workerDomain != nil {
@@ -189,6 +195,7 @@ class TunnelSession {
 
     /// Соединение закрыто (клиент отключился или ошибка). Вызывается на lwipQueue.
     func handleClose() {
+        postEvent("c\(connId):close")
         ws?.close()
         ws = nil
         wsConnected = false

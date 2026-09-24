@@ -224,6 +224,7 @@ static err_t tcp_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err) {
     g_conns[slot].active = 1;
 
     tcp_arg(newpcb, (void *)(uintptr_t)slot);
+    tcp_nagle_disable(newpcb);
     tcp_recv(newpcb, tcp_recv_cb);
     tcp_err(newpcb, tcp_err_cb);
     tcp_sent(newpcb, tcp_sent_cb);
