@@ -19,6 +19,7 @@ final class WSClient {
     private var connected = false
     private var initFrame: Data?
     private var firstRecv = false
+    private var pingOK = false
     private var upPosted = false
     private static var sndErrLogged = 0
     private let tag: String
@@ -161,13 +162,18 @@ final class WSClient {
         // Диагностика: pong = WS реально открыт (CF отвечает на ping сам).
         // ws_ping есть, ws_up нет — воркер жив, но завис его TCP к DC.
         wsTask.sendPing { [weak self] error in
-            self?.post(error == nil ? "ws_ping" : "ws_pingerr")
+            guard let self else { return }
+            if error == nil { self.pingOK = true }
+            self.post(error == nil ? "ws_ping" : "ws_pingerr")
         }
-        // Watchdog первого байта: DC выборочно блэкхолит SYN с Cloudflare,
-        // воркер без fail-fast висит молча, и клиент узнаёт об этом только
-        // через 12с (app-watchdog). Рвём в 7с — приложение ретраится быстрее.
+        // Watchdog: рвём в 7с ТОЛЬКО если WS не открылся (нет pong).
+        // При живом pong воркер здоров, а DC может легитимно думать над
+        // тяжёлым getDifference дольше 7с — убив такое соединение, мы
+        // перезапускаем catch-up с нуля = вечное «Обновление...».
+        // Зависший connect к DC теперь закрывает fail-fast воркера (4с),
+        // а молчащий DC добьёт app-watchdog (12с).
         DispatchQueue.global().asyncAfter(deadline: .now() + 7) { [weak self] in
-            guard let self, self.task != nil, !self.firstRecv else { return }
+            guard let self, self.task != nil, !self.firstRecv, !self.pingOK else { return }
             self.post("ws_slow")
             self.task?.cancel(with: .goingAway, reason: nil)
             self.task = nil
