@@ -158,6 +158,21 @@ final class WSClient {
         let wsTask = Self.sharedSession.webSocketTask(with: URLRequest(url: url))
         task = wsTask
         wsTask.resume()
+        // Диагностика: pong = WS реально открыт (CF отвечает на ping сам).
+        // ws_ping есть, ws_up нет — воркер жив, но завис его TCP к DC.
+        wsTask.sendPing { [weak self] error in
+            self?.post(error == nil ? "ws_ping" : "ws_pingerr")
+        }
+        // Watchdog первого байта: DC выборочно блэкхолит SYN с Cloudflare,
+        // воркер без fail-fast висит молча, и клиент узнаёт об этом только
+        // через 12с (app-watchdog). Рвём в 7с — приложение ретраится быстрее.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 7) { [weak self] in
+            guard let self, self.task != nil, !self.firstRecv else { return }
+            self.post("ws_slow")
+            self.task?.cancel(with: .goingAway, reason: nil)
+            self.task = nil
+            onClose()
+        }
         receiveLoop(onMessage: onMessage, onClose: onClose)
     }
 

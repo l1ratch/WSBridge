@@ -17,7 +17,7 @@
 #define LWIP_SOCKET             0
 
 #define MEMP_NUM_TCP_PCB        32
-#define MEMP_NUM_TCP_PCB_LISTEN 4
+#define MEMP_NUM_TCP_PCB_LISTEN 8
 #define MEMP_NUM_TCP_SEG        256
 #define MEMP_NUM_PBUF           32
 // Куча lwIP (MEM): из неё и входные pbuf (PBUF_RAM в lwip_bridge_input),

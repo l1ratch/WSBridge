@@ -318,10 +318,14 @@ void lwip_bridge_init(void *ctx,
     netif_set_up(&g_netif);
     netif_set_default(&g_netif);
 
-    // Listen on port 443
-    struct tcp_pcb *listen_pcb = tcp_new();
-    if (listen_pcb) {
-        tcp_bind(listen_pcb, IP4_ADDR_ANY, 443);
+    // Telegram-iOS рейсит каждый адрес по трём портам (:443, :80, :5222).
+    // Слушая только 443, lwIP отвечал RST на пробы — приложение списывало
+    // адреса в бэкофф. Все порты пайпятся к DC:443 (MTProto за ними один).
+    static const uint16_t listen_ports[] = { 443, 80, 5222 };
+    for (unsigned i = 0; i < sizeof(listen_ports) / sizeof(listen_ports[0]); i++) {
+        struct tcp_pcb *listen_pcb = tcp_new();
+        if (!listen_pcb) continue;
+        tcp_bind(listen_pcb, IP4_ADDR_ANY, listen_ports[i]);
         struct tcp_pcb *l = tcp_listen(listen_pcb);
         if (l) {
             tcp_accept(l, tcp_accept_cb);
