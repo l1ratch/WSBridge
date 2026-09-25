@@ -6,7 +6,7 @@ final class LWIPBridge {
     typealias OutputHandler = (Data) -> Void
     typealias AcceptHandler = (UInt32, UInt32) -> Void  // connId, dcIP
     typealias RecvHandler = (UInt32, Data) -> Void
-    typealias CloseHandler = (UInt32) -> Void
+    typealias CloseHandler = (UInt32, Int32) -> Void  // connId, reason
     typealias SentHandler = (UInt32) -> Void
 
     private var outputHandler: OutputHandler?
@@ -57,10 +57,10 @@ final class LWIPBridge {
                 let bytes = Data(bytes: data, count: Int(len))
                 bridge.recvHandler?(connId, bytes)
             },
-            { connId, ctx in
+            { connId, reason, ctx in
                 guard let ctx else { return }
                 let bridge = Unmanaged<LWIPBridge>.fromOpaque(ctx).takeUnretainedValue()
-                bridge.closeHandler?(connId)
+                bridge.closeHandler?(connId, reason)
             },
             { connId, ctx in
                 guard let ctx else { return }

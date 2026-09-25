@@ -21,6 +21,7 @@ class TunnelSession {
     private var headLogged = false
     private var upHeadLogged = false
     private var pending: Data?
+    private let createdAt = Date()
     /// Сессия закрыта; слот connId мог уйти новому соединению — писать/закрывать нельзя.
     private var dead = false
     private static var wfailLogged = 0
@@ -200,10 +201,12 @@ class TunnelSession {
         }
     }
 
-    /// Соединение закрыто (клиент отключился или ошибка). Вызывается на lwipQueue.
-    func handleClose() {
+    /// Соединение закрыто. reason: 0 = FIN клиента, 1 = stopTunnel,
+    /// отрицательное = err_t lwIP (RST и т.п.). Вызывается на lwipQueue.
+    func handleClose(reason: Int32 = 0) {
         dead = true
-        postEvent("c\(connId):close")
+        let why = reason == 0 ? "fin" : "r\(reason)"
+        postEvent("c\(connId):close:\(why):\(Int(Date().timeIntervalSince(createdAt)))s")
         ws?.close()
         ws = nil
         wsConnected = false

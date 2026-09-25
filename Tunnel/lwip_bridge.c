@@ -237,7 +237,7 @@ static err_t tcp_recv_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t e
     uint32_t id = (uint32_t)(uintptr_t)arg;
     if (err != ERR_OK || !p) {
         if (p) pbuf_free(p);
-        if (g_close) g_close(id, g_ctx);
+        if (g_close) g_close(id, err == ERR_OK ? 0 : (int32_t)err, g_ctx);
         conn_t *c = conn_of_id(id);
         if (c) {
             nat_remove(c->client_ip, c->client_port);
@@ -271,9 +271,8 @@ static err_t tcp_recv_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t e
 }
 
 static void tcp_err_cb(void *arg, err_t err) {
-    (void)err;
     uint32_t id = (uint32_t)(uintptr_t)arg;
-    if (g_close) g_close(id, g_ctx);
+    if (g_close) g_close(id, (int32_t)err, g_ctx);
     conn_t *c = conn_of_id(id);
     if (c) {
         nat_remove(c->client_ip, c->client_port);

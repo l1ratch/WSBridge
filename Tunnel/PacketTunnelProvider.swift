@@ -27,10 +27,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let ipv4 = NEIPv4Settings(addresses: ["198.18.0.2"], subnetMasks: ["255.255.255.255"])
         ipv4.includedRoutes = TelegramDCs.includedRoutes
         settings.ipv4Settings = ipv4
-
-        let ipv6 = NEIPv6Settings(addresses: ["fd00::2"], networkPrefixLengths: [128])
-        ipv6.includedRoutes = TelegramDCs.includedRoutes6
-        settings.ipv6Settings = ipv6
+        // IPv6 НЕ анонсируем: lwIP у нас v4-only, анонсированный v6-маршрут
+        // был чёрной дырой — SwiftGram ломился в v6 DC и висел до таймаута.
         settings.mtu = 1500
 
         setTunnelNetworkSettings(settings) { [weak self] error in
@@ -66,8 +64,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             recv: { [weak self] connId, data in
                 self?.handleRecv(connId: connId, data: data)
             },
-            close: { [weak self] connId in
-                self?.handleClose(connId: connId)
+            close: { [weak self] connId, reason in
+                self?.handleClose(connId: connId, reason: reason)
             },
             sent: { [weak self] connId in
                 self?.sessions[connId]?.handleSent()
@@ -95,7 +93,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         io.schedule(deadline: .now() + 15, repeating: 15)
         io.setEventHandler { [weak self] in
             guard let self else { return }
-            EventLog.append("io:in=\(self.packetCount) out=\(EventLog.outPkts) wd=\(EventLog.wsDown) wf=\(EventLog.writeFails) up=\(EventLog.upBytes) rx=\(EventLog.rxBytes) pend=\(EventLog.pendCur) sent=\(EventLog.sentCb)")
+            EventLog.append("io:in=\(self.packetCount) out=\(EventLog.outPkts) v6=\(EventLog.inV6) oth=\(EventLog.inOther) wd=\(EventLog.wsDown) wf=\(EventLog.writeFails) up=\(EventLog.upBytes) rx=\(EventLog.rxBytes) pend=\(EventLog.pendCur) sent=\(EventLog.sentCb)")
             for (id, _) in self.sessions.sorted(by: { $0.key < $1.key }).prefix(2) {
                 var st: UInt32 = 0, un: UInt32 = 0
                 lwip_bridge_conn_stats(id, &st, &un)
@@ -117,8 +115,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         sessions[connId]?.handleData(data)
     }
 
-    private func handleClose(connId: UInt32) {
-        sessions[connId]?.handleClose()
+    private func handleClose(connId: UInt32, reason: Int32) {
+        sessions[connId]?.handleClose(reason: reason)
         sessions.removeValue(forKey: connId)
     }
 
@@ -127,7 +125,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             guard let self else { return }
             self.lwipQueue.async {
                 for (packet, family) in zip(packets, protocols) {
-                    guard family.intValue == AF_INET else { continue }
+                    if family.intValue != AF_INET {
+                        EventLog.inV6 += 1
+                        continue
+                    }
+                    // Только TCP в lwIP; UDP (DNS мимо туннеля, QUIC) считаем и роняем.
+                    guard packet.count > 9, packet[9] == 6 else {
+                        EventLog.inOther += 1
+                        continue
+                    }
                     self.packetCount += 1
                     self.byteCount += UInt64(packet.count)
                     self.lwip.input(packet)
@@ -164,7 +170,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         pollTimer?.cancel(); pollTimer = nil
         ioTimer?.cancel(); ioTimer = nil
         lwipQueue.sync {
-            for (_, session) in sessions { session.handleClose() }
+            for (_, session) in sessions { session.handleClose(reason: 1) }
             sessions.removeAll()
         }
         completionHandler()

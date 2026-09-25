@@ -12,8 +12,9 @@ typedef void (*lwip_accept_cb)(uint32_t conn_id, void *ctx);
 // Callback: TCP data received from client
 typedef void (*lwip_recv_cb)(uint32_t conn_id, const uint8_t *data, uint16_t len, void *ctx);
 
-// Callback: TCP connection closed/errored
-typedef void (*lwip_close_cb)(uint32_t conn_id, void *ctx);
+// Callback: TCP connection closed/errored. reason: 0 = client FIN,
+// negative = lwIP err_t (RST etc.), 1 = local stopTunnel teardown.
+typedef void (*lwip_close_cb)(uint32_t conn_id, int32_t reason, void *ctx);
 
 // Callback: TCP send buffer has space (can write more)
 typedef void (*lwip_sent_cb)(uint32_t conn_id, void *ctx);
