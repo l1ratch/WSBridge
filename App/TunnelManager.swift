@@ -179,12 +179,12 @@ final class TunnelManager: ObservableObject {
             if let existing = manager {
                 m = existing
             } else {
+                // Сохранять свежий менеджер БЕЗ protocolConfiguration нельзя:
+                // NEVPNError 1 «Missing protocol or protocol has invalid type».
+                // Протокол назначается ниже, до первого saveToPreferences.
                 let fresh = NETunnelProviderManager()
                 fresh.localizedDescription = "WSBridge"
-                try await fresh.saveToPreferences()
-                try await fresh.loadFromPreferences()
                 m = fresh
-                manager = m
             }
             // Конфигурация пересоздаётся при каждом включении: домен worker'а
             // доезжает до расширения через providerConfiguration.
@@ -203,6 +203,7 @@ final class TunnelManager: ObservableObject {
                 try await m.saveToPreferences()
                 try await m.loadFromPreferences()
             }
+            manager = m
             switch m.connection.status {
             case .connected, .connecting, .reasserting:
                 m.connection.stopVPNTunnel()
