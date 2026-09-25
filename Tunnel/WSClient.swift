@@ -187,16 +187,6 @@ final class WSClient {
             guard let self else { return }
             switch result {
             case .success(let message):
-                // Close-фрейм приходит как .success(.close) — раньше молча
-                // проглатывался. Код закрытия отличает убийство инстанса
-                // воркера (1006) от fail-fast (1002) и чистого закрытия DC.
-                if case .close(let code, let reason) = message {
-                    self.connected = false
-                    let r = reason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-                    self.post("ws_closed:\(code.rawValue):\(r)")
-                    onClose()
-                    return
-                }
                 if !firstRecv {
                     firstRecv = true
                     if !upPosted {
@@ -209,8 +199,12 @@ final class WSClient {
                 }
                 self.receiveLoop(onMessage: onMessage, onClose: onClose)
             case .failure(let error):
+                // Код закрытия отличает убийство соединения снаружи (1006)
+                // от чистого close-фрейма воркера/DC (1000/1002/1011).
+                let code = self.task?.closeCode.rawValue ?? -1
+                let reason = self.task?.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                self.post("ws_closed:\(code):\(reason):\(error.localizedDescription)")
                 self.connected = false
-                self.post("ws_err:\(error.localizedDescription)")
                 onClose()
             }
         }
