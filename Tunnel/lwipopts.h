@@ -18,18 +18,22 @@
 
 #define MEMP_NUM_TCP_PCB        32
 #define MEMP_NUM_TCP_PCB_LISTEN 4
-#define MEMP_NUM_TCP_SEG        64
+#define MEMP_NUM_TCP_SEG        256
 #define MEMP_NUM_PBUF           32
 // Куча lwIP (MEM): из неё и входные pbuf (PBUF_RAM в lwip_bridge_input),
-// и копии tcp_write. Дефолт 1600 — один сегмент 1460B её исчерпывал:
-// ACK клиента дропались на pbuf_alloc, tcp_write давал ERR_MEM при
-// пустом окне (wfail:err=-1 wnd=65535 buf=16384 un=0).
-#define MEM_SIZE                (128 * 1024)
+// и копии tcp_write. 1MB: окно 64K на соединение × десяток соединений —
+// unacked-данные лежат в куче, при нехватке input молча дропался бы
+// на pbuf_alloc (счётчик inmem в io-строке журнала).
+#define MEM_SIZE                (1024 * 1024)
 #define PBUF_POOL_SIZE          64
 #define PBUF_POOL_BUFSIZE       1600
 
-#define TCP_SND_BUF             16384
-#define TCP_WND                 16384
+// Пропускная способность ≈ WND/RTT. При 16K и RTT 0.2–0.4s через воркер
+// выходило ~50–80 КБ/с: тяжёлый updates.getDifference не успевал пройти
+// за 12s response-watchdog Telegram-iOS → весь bootstrap-батч уходил
+// на пересылку → вечный цикл «Соединение...». 64K — четырёхкратный запас.
+#define TCP_SND_BUF             65535
+#define TCP_WND                 65535
 #define TCP_MSS                 1460
 
 #define LWIP_NETIF_TX_SINGLE_PBUF 1

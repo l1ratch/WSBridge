@@ -32,6 +32,7 @@ static nat_entry_t g_nat[NAT_MAX];
 static uint32_t g_dbg_key_ip, g_dbg_dc, g_dbg_nat_ip, g_dbg_nat_dc;
 static uint16_t g_dbg_key_port, g_dbg_nat_port;
 static int g_last_write_err = 0;
+static uint32_t g_inmem_drops = 0; // input-пакеты, дропнутые на pbuf_alloc (куча)
 
 static void nat_add(uint32_t client_ip, uint16_t client_port, uint32_t dc_ip) {
     // Reuse existing entry or find a free slot
@@ -384,7 +385,7 @@ void lwip_bridge_input(const uint8_t *data, uint16_t len) {
     }
 
     struct pbuf *p = pbuf_alloc(PBUF_RAW, len, PBUF_RAM);
-    if (!p) { free(buf); return; }
+    if (!p) { free(buf); g_inmem_drops++; return; }
     memcpy(p->payload, buf, len);
     free(buf);
 
@@ -449,3 +450,5 @@ void lwip_bridge_dbg_nat(uint32_t *key_ip, uint16_t *key_port, uint32_t *dc,
     *key_ip = g_dbg_key_ip; *key_port = g_dbg_key_port; *dc = g_dbg_dc;
     *nat_ip = g_dbg_nat_ip; *nat_port = g_dbg_nat_port; *nat_dc = g_dbg_nat_dc;
 }
+
+uint32_t lwip_bridge_inmem_drops(void) { return g_inmem_drops; }

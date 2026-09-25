@@ -52,4 +52,7 @@ void lwip_bridge_conn_stats(uint32_t conn_id, uint32_t *state, uint32_t *unacked
 // Diagnostics: last tcp_write err code + send window/buffer of a conn
 void lwip_bridge_snd_dbg(uint32_t conn_id, int *err, uint32_t *snd_wnd, uint32_t *snd_buf, uint32_t *unacked);
 
+// Diagnostics: input packets dropped on pbuf_alloc (lwIP heap exhaustion)
+uint32_t lwip_bridge_inmem_drops(void);
+
 #endif

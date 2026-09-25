@@ -93,7 +93,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         io.schedule(deadline: .now() + 15, repeating: 15)
         io.setEventHandler { [weak self] in
             guard let self else { return }
-            EventLog.append("io:in=\(self.packetCount) out=\(EventLog.outPkts) v6=\(EventLog.inV6) oth=\(EventLog.inOther) wd=\(EventLog.wsDown) wf=\(EventLog.writeFails) up=\(EventLog.upBytes) rx=\(EventLog.rxBytes) pend=\(EventLog.pendCur) sent=\(EventLog.sentCb)")
+            EventLog.append("io:in=\(self.packetCount) out=\(EventLog.outPkts) v6=\(EventLog.inV6) oth=\(EventLog.inOther) wd=\(EventLog.wsDown) wf=\(EventLog.writeFails) up=\(EventLog.upBytes) rx=\(EventLog.rxBytes) pend=\(EventLog.pendCur) sent=\(EventLog.sentCb) inmem=\(lwip_bridge_inmem_drops())")
             for (id, _) in self.sessions.sorted(by: { $0.key < $1.key }).prefix(2) {
                 var st: UInt32 = 0, un: UInt32 = 0
                 lwip_bridge_conn_stats(id, &st, &un)
