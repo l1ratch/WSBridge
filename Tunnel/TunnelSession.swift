@@ -98,11 +98,15 @@ class TunnelSession {
         postEvent("pipe:conn\(connId):\(dst)" + (dcIP == 0 ? ":raw=0" : ""))
         let ws = WSClient(tag: "c\(connId)")
         self.ws = ws
-        ws.connectPipe(workerDomain: workerDomain, dst: dst, onMessage: { [weak self] data in
-            self?.handleWSData(data)
-        }, onClose: { [weak self] in
-            self?.handleWSClose()
-        })
+        let onMsg = { [weak self] (data: Data) in self?.handleWSData(data) }
+        let onCls = { [weak self] in self?.handleWSClose() }
+        // Поле «host:port» = прямое реле на VPS: сырой TCP, CF не участвует.
+        let rest = workerDomain.split(separator: ":", maxSplits: 1)
+        if rest.count == 2, let port = UInt16(rest[1]) {
+            ws.connectRelay(host: String(rest[0]), port: port, dst: dst, onMessage: onMsg, onClose: onCls)
+        } else {
+            ws.connectPipe(workerDomain: workerDomain, dst: dst, onMessage: onMsg, onClose: onCls)
+        }
         wsConnected = true
     }
 

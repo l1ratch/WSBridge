@@ -19,7 +19,7 @@ struct ContentView: View {
                 Task { await tunnel.toggle() }
             }
             .buttonStyle(.borderedProminent)
-            TextField("CF worker: name.user.workers.dev (опц.)", text: $tunnel.workerDomain)
+            TextField("CF worker или реле ip:port", text: $tunnel.workerDomain)
                 .textFieldStyle(.roundedBorder)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -78,8 +78,13 @@ struct ContentView: View {
     }
 
     private var workerHint: String {
-        tunnel.workerDomain.trimmingCharacters(in: .whitespaces).isEmpty
-            ? "Без worker'а используются общие домены kws — они сейчас деградируют (503)."
-            : "Pipe-режим: байты идут через твой worker напрямую в DC. Включи туннель заново, чтобы применилось."
+        let wd = tunnel.workerDomain.trimmingCharacters(in: .whitespaces)
+        if wd.isEmpty {
+            return "Без worker'а используются общие домены kws — они сейчас деградируют (503)."
+        }
+        if wd.contains(":") {
+            return "Прямой режим: сырой TCP на реле host:port (VPS), без CF worker."
+        }
+        return "Pipe-режим: байты идут через твой worker напрямую в DC. Включи туннель заново, чтобы применилось."
     }
 }

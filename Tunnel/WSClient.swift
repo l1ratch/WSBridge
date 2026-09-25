@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// WS-клиент к kws-гейтвею Telegram. Каждый MTProto-пакет — отдельный WS-фрейм.
 ///
@@ -20,6 +21,10 @@ final class WSClient {
     private var initFrame: Data?
     private var firstRecv = false
     private var pingOK = false
+    private var relayConn: NWConnection?
+    private var relayReady = false
+    private var relayPending = Data()
+    private static let relaySecret = "wsb1" // == SECRET в tools/vps_relay.py
     private var upPosted = false
     private static var sndErrLogged = 0
     private let tag: String
@@ -213,6 +218,14 @@ final class WSClient {
     // ponytail: send сразу после resume() — URLSession сам буферизует до конца
     // handshake. Guard на connected был багом: init дропался, гейтвей молчал.
     func send(_ data: Data) {
+        if let rc = relayConn {
+            if relayReady {
+                rc.send(content: data, completion: .contentProcessed { _ in })
+            } else {
+                relayPending.append(data)
+            }
+            return
+        }
         task?.send(.data(data)) { error in
             if let error {
                 NSLog("[WSBridge] WS send error: \(error.localizedDescription)")
@@ -230,8 +243,84 @@ final class WSClient {
 
     func close() {
         connected = false
+        if let rc = relayConn {
+            relayConn = nil
+            rc.cancel()
+            return
+        }
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
+    }
+
+    /// Прямой режим: сырой TCP на своё реле (VPS) — без CF, без WS, без TLS
+    /// (ATS не действует на NWConnection, сертификат не нужен). Протокол тот
+    /// же, что у воркера: строка «секрет dst\n», дальше сырой поток в обе стороны.
+    func connectRelay(host: String, port: UInt16, dst: String, onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
+        post("relay_try:\(host):\(port)")
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else {
+            post("relay_badport:\(port)")
+            onClose()
+            return
+        }
+        let conn = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: .tcp)
+        relayConn = conn
+        var finished = false
+        let finishOnce = {
+            guard !finished else { return }
+            finished = true
+            self.relayConn = nil
+            onClose()
+        }
+        conn.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .ready:
+                self.relayReady = true
+                self.post("relay_up")
+                var head = Data("\(Self.relaySecret) \(dst)\n".utf8)
+                head.append(self.relayPending)
+                self.relayPending = Data()
+                conn.send(content: head, completion: .contentProcessed { _ in })
+                self.relayReceive(onMessage: onMessage, finish: finishOnce)
+            case .failed(let error):
+                self.post("relay_closed:\(error.localizedDescription)")
+                finishOnce()
+            case .cancelled:
+                finishOnce()
+            default:
+                break
+            }
+        }
+        conn.start(queue: .global(qos: .userInitiated))
+        // Реле принимает мгновенно; нет .ready за 5с — адрес недоступен.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5) { [weak self] in
+            guard let self, self.relayConn === conn, !self.relayReady else { return }
+            self.post("relay_slow")
+            conn.cancel()
+            finishOnce()
+        }
+    }
+
+    private func relayReceive(onMessage: @escaping (Data) -> Void, finish: @escaping () -> Void) {
+        relayConn?.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self else { return }
+            if let data, !data.isEmpty {
+                if !self.firstRecv {
+                    self.firstRecv = true
+                    if !self.upPosted {
+                        self.upPosted = true
+                        self.post("ws_up") // единая стадия для статистики приложения
+                    }
+                }
+                onMessage(data)
+                self.relayReceive(onMessage: onMessage, finish: finish)
+                return
+            }
+            if isComplete || error != nil {
+                self.post("relay_closed:end")
+                finish()
+            }
+        }
     }
 
     private static func postEvent(_ name: String) {
