@@ -17,14 +17,16 @@ ip = sys.argv[1] if len(sys.argv) > 1 else '149.154.167.220'
 
 
 def attempt(path, origin, dc=2, sni=None):
-    sni = sni or f'kws{dc}.web.telegram.org'
+    if sni is None:
+        sni = f'kws{dc}.web.telegram.org'
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
+    host_hdr = os.environ.get('GW_HOST') or sni or f'kws{dc}.web.telegram.org'
     s = socket.create_connection((ip, 443), timeout=8)
-    ss = ctx.wrap_socket(s, server_hostname=sni)
+    ss = ctx.wrap_socket(s, server_hostname=sni or None)
     key = base64.b64encode(os.urandom(16)).decode()
-    req = (f'GET {path} HTTP/1.1\r\nHost: {sni}\r\nUpgrade: websocket\r\n'
+    req = (f'GET {path} HTTP/1.1\r\nHost: {host_hdr}\r\nUpgrade: websocket\r\n'
            f'Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n'
            f'Sec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: binary\r\n')
     if origin:
@@ -70,10 +72,6 @@ def attempt(path, origin, dc=2, sni=None):
     return f'NO-RESPQ plain={len(buf)}B'
 
 
-for path, origin in [
-    ('/apiws', 'https://web.telegram.org'),
-    ('/apiws', None),
-    ('/apiws_test', None),
-]:
-    print(f'{ip} path={path} origin={origin}: {attempt(path, origin)}', flush=True)
-print(f'{ip} sni=IP host=kws2: {attempt("/apiws", None, 2, sni=ip)}', flush=True)
+print(f'{ip} NO-SNI host=kws2: {attempt("/apiws", None, 2, sni="")}', flush=True)
+os.environ['GW_HOST'] = 'web.telegram.org'
+print(f'{ip} NO-SNI host=web.telegram.org: {attempt("/apiws", None, 2, sni="")}', flush=True)

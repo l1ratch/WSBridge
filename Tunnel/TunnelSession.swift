@@ -82,7 +82,7 @@ class TunnelSession {
 
         let ws = WSClient(tag: "c\(connId)")
         self.ws = ws
-        ws.connect(dc: parsed.dcId, isTestDC: parsed.isTestDC, initFrame: initData, onMessage: { [weak self] data in
+        ws.connect(dc: parsed.dcId, isMedia: parsed.isMedia, isTestDC: parsed.isTestDC, initFrame: initData, onMessage: { [weak self] data in
             self?.handleWSData(data)
         }, onClose: { [weak self] in
             self?.handleWSClose()
