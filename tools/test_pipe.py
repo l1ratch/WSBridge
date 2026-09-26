@@ -130,18 +130,37 @@ def main():
     direct = 'direct' in sys.argv
     abridged = os.environ.get('TP_PROTO', 'abridged') == 'abridged'
     dc_idx = int(os.environ.get('TP_DC', '2'))
+    secret_hex = os.environ.get('TP_SECRET', '')
+    secret = bytes.fromhex(secret_hex) if secret_hex else b''
 
-    init = make_init(dc_idx, ABRIDGED if abridged else INTERMEDIATE)
+    init = make_init(dc_idx, ABRIDGED if abridged else INTERMEDIATE, secret)
     nonce = os.urandom(16)
-    # upstream: key/iv из init как есть; downstream: перевёрнутые
-    enc_up = ctr(init[8:40], init[40:56])
-    rev = init[8:56][::-1]
-    dec_down = ctr(rev[:32], rev[32:])
+
+    def make_streams(init):
+        if secret:
+            # MTProxy c secret: ключи = SHA256(prekey+secret); down БЕЗ скипа 64
+            import hashlib
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+            up_key = hashlib.sha256(init[8:40] + secret).digest()
+            up = Cipher(algorithms.AES(up_key), modes.CTR(init[40:56])).encryptor()
+            up.update(ZERO_64)
+            rev = init[8:56][::-1]
+            dn_key = hashlib.sha256(rev[:32] + secret).digest()
+            dn = Cipher(algorithms.AES(dn_key), modes.CTR(rev[32:])).encryptor()
+            return up, dn
+        # upstream: key/iv из init как есть; downstream: перевёрнутые
+        rev = init[8:56][::-1]
+        return ctr(init[8:40], init[40:56]), ctr(rev[:32], rev[32:])
+
+    enc_up, dec_down = make_streams(init)
 
     if direct:
         import socket
-        print(f'DIRECT TCP {dst}:443 dc={dc_idx} proto=intermediate')
-        ss = socket.create_connection((dst, 443), timeout=15)
+        host, _, port = dst.rpartition(':')
+        port = int(port) if host else 443
+        host = host or dst
+        print(f'DIRECT TCP {host}:{port} dc={dc_idx} proto=intermediate')
+        ss = socket.create_connection((host, port), timeout=15)
         t0 = time.time()
         ss.sendall(init)
         ss.sendall(enc_up.update(build_req_pq(nonce, abridged)))
@@ -177,10 +196,8 @@ def main():
         # пересобираем init с padded-тегом (0xdd)
         abridged = False
         ss.close()
-        init = make_init(dc_idx, b'\xdd\xdd\xdd\xdd')
-        enc_up = ctr(init[8:40], init[40:56])
-        rev = init[8:56][::-1]
-        dec_down = ctr(rev[:32], rev[32:])
+        init = make_init(dc_idx, b'\xdd\xdd\xdd\xdd', secret)
+        enc_up, dec_down = make_streams(init)
         ss = ws_connect(host, path=f'/apiws?dst={dst}')
         print('reconnected with PADDED tag')
         t0 = time.time()

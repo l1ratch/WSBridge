@@ -71,10 +71,11 @@ def probe(host: str, dc: int):
             pass
 
 
-dc = int(sys.argv[1]) if len(sys.argv) > 1 else 2
-for base in BASES:
-    host = f'kws{dc}.{base}'
-    r = probe(host, dc)
-    print(f'{host}: {r}', flush=True)
-    if r.startswith('ALIVE'):
-        break
+if __name__ == '__main__':
+    dc = int(sys.argv[1]) if len(sys.argv) > 1 else 2
+    for base in BASES:
+        host = f'kws{dc}.{base}'
+        r = probe(host, dc)
+        print(f'{host}: {r}', flush=True)
+        if r.startswith('ALIVE'):
+            break

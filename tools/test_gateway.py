@@ -2,7 +2,7 @@
 # Строит init как _generate_relay_init из tg_ws_proxy.py, шлёт WS-фреймом, ждёт ответ.
 import os, ssl, socket, struct, base64, sys, time
 
-def make_init(dc_idx: int, proto_tag: bytes) -> bytes:
+def make_init(dc_idx: int, proto_tag: bytes, secret: bytes = b'') -> bytes:
     RESERVED_FIRST = {0xEF}
     RESERVED_STARTS = [b'HEAD', b'POST', b'GET ', b'\xee\xee\xee\xee',
                        b'\xdd\xdd\xdd\xdd', b'\x16\x03\x01\x02']
@@ -13,9 +13,11 @@ def make_init(dc_idx: int, proto_tag: bytes) -> bytes:
         if rnd[4:8] == b'\x00\x00\x00\x00': continue
         break
     rnd = bytes(rnd)
-    # AES-CTR через cryptography
+    # AES-CTR через cryptography; с secret ключ = SHA256(prekey+secret) (MTProxy)
+    import hashlib
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    key, iv = rnd[8:40], rnd[40:56]
+    prekey, iv = rnd[8:40], rnd[40:56]
+    key = hashlib.sha256(prekey + secret).digest() if secret else prekey
     enc = Cipher(algorithms.AES(key), modes.CTR(iv)).encryptor()
     encrypted = enc.update(rnd)
     keystream = bytes(encrypted[i] ^ rnd[i] for i in range(56, 64))
