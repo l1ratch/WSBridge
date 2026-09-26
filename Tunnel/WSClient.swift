@@ -41,7 +41,7 @@ final class WSClient {
                 return
             }
             for name in ["kws1.web.telegram.org", "web.telegram.org"] {
-                SecTrustSetPeerDomainName(trust, name as CFString)
+                SecTrustSetPolicies(trust, SecPolicyCreateSSL(true, name as CFString))
                 var err: CFError?
                 if SecTrustEvaluateWithError(trust, &err) {
                     completionHandler(.useCredential, URLCredential(trust: trust))
@@ -149,7 +149,7 @@ final class WSClient {
             guard let self else { return }
             switch result {
             case .success(let message):
-                state.claim()
+                _ = state.claim()
                 self.connected = true
                 if case .data(let data) = message {
                     self.firstRecv = true
