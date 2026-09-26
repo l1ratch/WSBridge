@@ -71,18 +71,32 @@ final class WSClient {
         Self.postEvent(tag.isEmpty ? name : "\(tag):\(name)")
     }
 
-    /// Подключается к kws-гейтвею. Пробует прямые IP, CF-домены, потом web.telegram.org.
+    /// Подключается к kws-гейтвею. Порядок: CF-фронты (ротация старта) → прямые
+    /// IP гейтвеев → kws{dc}.web.telegram.org. Фронты первыми: на LTE они
+    /// единственные дают мгновенный 101 (TG-диапазон 149.154.* сотовые
+    /// операторы блокируют на L4, а CF — нет); 10с-таймауты на IP не давали
+    /// каскаду дойти до фронтов до перезапуска соединения SwiftGram.
     /// initFrame (64-байтовый MTProto init) шлётся первым фреймом на КАЖДОМ
     /// эндпоинте каскада — при failover старый task со своим init выбрасывается.
+    private static var rrStart = 0
+
     func connect(dc: Int, isMedia: Bool, isTestDC: Bool, initFrame: Data, onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
         let path = isTestDC ? "/apiws_test" : "/apiws"
         self.initFrame = initFrame
 
         // Media-DC у десктопа ходит на kws{dc}-1; обычный — kws{dc}.
         let gwHost = isMedia ? "kws\(dc)-1.web.telegram.org" : "kws\(dc).web.telegram.org"
+
+        // Round-robin старт: SwiftGram держит ~12 параллельных соединений —
+        // каждое начнёт со своего фронта и живые найдутся быстрее.
+        let fronts = CFDomains.domains(dc: dc)
+        Self.rrStart = (Self.rrStart + 1) % fronts.count
+        let start = Self.rrStart
+        let rotated = Array(fronts[start...] + fronts[..<start])
+
         var endpoints: [(host: String, hostHeader: String?)] =
-            Self.gatewayIPs.map { ($0, gwHost as String?) }
-        endpoints += CFDomains.domains(dc: dc).map { ($0, nil as String?) }
+            rotated.prefix(6).map { ($0, nil as String?) }
+        endpoints += Self.gatewayIPs.map { ($0, gwHost as String?) }
         endpoints.append((gwHost, nil))
 
         tryConnect(endpoints: endpoints, path: path, index: 0, onMessage: onMessage, onClose: onClose)
@@ -163,9 +177,10 @@ final class WSClient {
             }
         }
 
-        // Таймер только на фазу коннекта. Доставленный init (delivered) гасит его —
-        // раньше он убивал живое соединение, если DC отвечал дольше 10с.
-        DispatchQueue.global().asyncAfter(deadline: .now() + 10) {
+        // Таймер только на фазу коннекта (5с: живые фронты дают 101 за <1с,
+        // висящие эндпоинты не должны съедать терпение SwiftGram).
+        // Доставленный init (delivered) гасит его.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
             guard !state.delivered, state.claim() else { return }
             NSLog("[WSBridge] WS: \(ep.host) connect timed out, trying next")
             self.post("ws_timeout:\(ep.host)")
