@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build_ipa:
@@ -57,3 +57,42 @@ jobs:
           name: WSBridge-IPA
           path: WSBridge.ipa
           if-no-files-found: error
+
+      # GBox-источник: IPA + манифест (AltStore-формат) в gh-pages,
+      # раздаётся через https://l1ratch.github.io/WSBridge/
+      - name: Publish to gh-pages
+        run: |
+          set -e
+          VER=$(grep -m1 'CFBundleVersion' project.yml | sed -E 's/.*"([0-9]+)".*/\1/')
+          SIZE=$(stat -f%z WSBridge.ipa)
+          cp WSBridge.ipa /tmp/wsb.ipa
+          cat > /tmp/source.json <<EOF
+          {
+            "name": "WSBridge",
+            "identifier": "wsbridge.gh",
+            "sourceURL": "https://l1ratch.github.io/WSBridge/source.json",
+            "apps": [
+              {
+                "name": "WSBridge",
+                "bundleIdentifier": "com.l1ratch.WSBridge",
+                "developerName": "l1ratch",
+                "version": "0.2.$VER",
+                "versionDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+                "versionDescription": "build $VER",
+                "size": $SIZE,
+                "downloadURL": "https://l1ratch.github.io/WSBridge/wsb.ipa",
+                "localizedDescription": "Telegram WS-туннель. Неподписанный IPA — GBox подпишет при установке."
+              }
+            ]
+          }
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages --depth=1 || true
+          git checkout -B gh-pages FETCH_HEAD 2>/dev/null || git checkout --orphan gh-pages
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          cp /tmp/wsb.ipa wsb.ipa
+          cp /tmp/source.json source.json
+          git add -f wsb.ipa source.json
+          git commit -m "publish build $VER" || echo "no changes"
+          git push -f origin gh-pages
