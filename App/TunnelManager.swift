@@ -74,8 +74,13 @@ private extension Array {
 
 @MainActor
 final class TunnelManager: ObservableObject {
-    // ponytail: держим в одном месте; bundle id должен совпадать с project.yml и профилем подписи
-    static let providerBundleId = "com.l1ratch.WSBridge.tunnel"
+    // ponytail: bundle id может измениться при переподписи GBox — выводим из
+    // фактического id приложения, а не хардкода. Работает и с исходным, и с
+    // переподписанным бандлом. Расширение по-прежнему ищется как "<app id>.tunnel".
+    static let providerBundleId: String = {
+        let app = Bundle.main.bundleIdentifier ?? "com.l1ratch.WSBridge"
+        return app + ".tunnel"
+    }()
 
     @Published private(set) var status: NEVPNStatus = .invalid
     @Published private(set) var stats: String?
