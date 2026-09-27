@@ -52,7 +52,11 @@ private final class JournalReader {
         finished = true
         conn?.cancel()
         conn = nil
-        onText(text)
+        if text.hasPrefix("журнал недоступен") {
+            onText(text + "\n\nЖурнал живёт внутри процесса туннеля. Включи VPN и обнови — первым блоком будет === PREV RUN ===: лог прошлого запуска с причиной смерти (tunnel_stop:reason=N или обрыв + mem= перед ним).")
+        } else {
+            onText(text)
+        }
         onDone?()
         onDone = nil
     }
