@@ -169,23 +169,37 @@ class TunnelSession {
     /// ponytail: tcp_write может вернуть ERR_MEM (окно/буфер забиты). Раньше байты
     /// просто дропались — дыра в шифрпотоке фатальна для MTProto. Теперь очередь:
     /// дожидается sent-колбэка и дописывает.
+    /// C-мост принимает u16-длину: WS-кадр гейтвея может быть >64KB (большие
+    /// MTProto-пакеты catch-up) — UInt16(count) трапил и убивал расширение
+    /// (краш-лог 27.09: LWIPBridge.write brk#1). Режем на куски ≤65535; при
+    /// ERR_MEM остаток (включая текущий кусок) уходит в pending одним блоком.
     private func writeOrQueue(_ data: Data) -> Bool {
         if pending != nil {
             pending?.append(data)
             EventLog.pendCur += UInt64(data.count)
             return false
         }
-        if bridge.write(connId: connId, data: data) { return true }
-        EventLog.writeFails += 1
-        pending = data
-        EventLog.pendCur += UInt64(data.count)
-        if Self.wfailLogged < 3 {
-            Self.wfailLogged += 1
-            var e: Int32 = 0, w: UInt32 = 0, b: UInt32 = 0, u: UInt32 = 0
-            lwip_bridge_snd_dbg(connId, &e, &w, &b, &u)
-            postEvent("wfail:c\(connId):err=\(e) wnd=\(w) buf=\(b) un=\(u)")
+        let d = Data(data) // нормализуем slice-индексы (startIndex=0)
+        var off = 0
+        while off < d.count {
+            let end = min(off + 65535, d.count)
+            if bridge.write(connId: connId, data: d.subdata(in: off..<end)) {
+                off = end
+                continue
+            }
+            EventLog.writeFails += 1
+            let rest = d.subdata(in: off..<d.count)
+            pending = rest
+            EventLog.pendCur += UInt64(rest.count)
+            if Self.wfailLogged < 3 {
+                Self.wfailLogged += 1
+                var e: Int32 = 0, w: UInt32 = 0, b: UInt32 = 0, u: UInt32 = 0
+                lwip_bridge_snd_dbg(connId, &e, &w, &b, &u)
+                postEvent("wfail:c\(connId):err=\(e) wnd=\(w) buf=\(b) un=\(u)")
+            }
+            return false
         }
-        return false
+        return true
     }
 
     /// Освободилось место в send-буфере lwIP — дописываем очередь. Вызывается на lwipQueue.
@@ -193,12 +207,8 @@ class TunnelSession {
         EventLog.sentCb += 1
         guard let p = pending else { return }
         pending = nil
-        if bridge.write(connId: connId, data: p) {
-            EventLog.pendCur -= UInt64(p.count)
-        } else {
-            EventLog.writeFails += 1
-            pending = p
-        }
+        EventLog.pendCur = 0 // writeOrQueue пересчитает, если снова ERR_MEM
+        _ = writeOrQueue(p)
     }
 
     private func handleWSClose() {
