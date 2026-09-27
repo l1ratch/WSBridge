@@ -125,7 +125,7 @@ final class TunnelManager: ObservableObject {
                         let idx = (Int(bitPattern: observer) ?? 1) - 1
                         let eventName = darwinEventNames[safe: idx] ?? "unknown"
                         // ponytail: pkts и accept не должны перетирать WS-стадию —
-                        // пробы SwiftGram плодят accept'ы без продолжения и прячут
+                        // пробы Telegram плодят accept'ы без продолжения и прячут
                         // реальную стадию живой сессии.
                         if eventName == "pkts" {
                             ref.lastPacketSignal = Date()

@@ -34,7 +34,7 @@ class TunnelSession {
         self.queue = queue
     }
 
-    /// Данные от клиента (SwiftGram) через lwIP. Вызывается на lwipQueue.
+    /// Данные от клиента (Telegram) через lwIP. Вызывается на lwipQueue.
     func handleData(_ data: Data) {
         EventLog.rxBytes += UInt64(data.count)
         if !upHeadLogged {

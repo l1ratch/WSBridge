@@ -28,7 +28,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         ipv4.includedRoutes = TelegramDCs.includedRoutes
         settings.ipv4Settings = ipv4
         // IPv6 НЕ анонсируем: lwIP у нас v4-only, анонсированный v6-маршрут
-        // был чёрной дырой — SwiftGram ломился в v6 DC и висел до таймаута.
+        // был чёрной дырой — Telegram ломился в v6 DC и висел до таймаута.
         settings.mtu = 1500
 
         setTunnelNetworkSettings(settings) { [weak self] error in

@@ -75,14 +75,14 @@ final class WSClient {
     /// IP гейтвеев → kws{dc}.web.telegram.org. Фронты первыми: на LTE они
     /// единственные дают мгновенный 101 (TG-диапазон 149.154.* сотовые
     /// операторы блокируют на L4, а CF — нет); 10с-таймауты на IP не давали
-    /// каскаду дойти до фронтов до перезапуска соединения SwiftGram.
+    /// каскаду дойти до фронтов до перезапуска соединения Telegram.
     /// initFrame (64-байтовый MTProto init) шлётся первым фреймом на КАЖДОМ
     /// эндпоинте каскада — при failover старый task со своим init выбрасывается.
     private static var rrStart = 0
 
     /// Кэш здоровья эндпоинтов: упавший (timeout/ошибка до первых данных)
     /// исключается из каскадов на 10 минут. Убирает долбёжку мёртвых фронтов
-    /// кругами (батарея/CPU/лог-шум), когда SwiftGram держит ~12 соединений.
+    /// кругами (батарея/CPU/лог-шум), когда Telegram держит ~12 соединений.
     /// Если отфильтровать нечего — пробуем всё (фронты могут ожить волной).
     private static var deadUntil: [String: Date] = [:]
     private static let healthLock = NSLock()
@@ -115,7 +115,7 @@ final class WSClient {
         // Media-DC у десктопа ходит на kws{dc}-1; обычный — kws{dc}.
         let gwHost = isMedia ? "kws\(dc)-1.web.telegram.org" : "kws\(dc).web.telegram.org"
 
-        // Round-robin старт: SwiftGram держит ~12 параллельных соединений —
+        // Round-robin старт: Telegram держит ~12 параллельных соединений —
         // каждое начнёт со своего фронта и живые найдутся быстрее.
         let fronts = CFDomains.domains(dc: dc)
         Self.rrStart = (Self.rrStart + 1) % fronts.count
@@ -158,7 +158,7 @@ final class WSClient {
         // отправляется на следующем эндпоинте (CTR-позиции клиента и DC
         // синхронны от init, потерянные кадры MTProto ретраит сам).
         // После первых полученных данных любая ошибка закрывает сессию —
-        // SwiftGram переподключится (новая сессия, новый каскад).
+        // Telegram переподключится (новая сессия, новый каскад).
         let state = TryState()
         func advance() {
             guard state.claim() else { return }
@@ -214,7 +214,7 @@ final class WSClient {
         }
 
         // Таймер только на фазу коннекта (5с: живые фронты дают 101 за <1с,
-        // висящие эндпоинты не должны съедать терпение SwiftGram).
+        // висящие эндпоинты не должны съедать терпение Telegram).
         // Доставленный init (delivered) гасит его.
         DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
             guard !state.delivered, state.claim() else { return }
