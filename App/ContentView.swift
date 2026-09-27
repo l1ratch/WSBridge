@@ -11,16 +11,16 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Мягкий многоцветный фон-градиент
+                // Градиент: живой цветной верх, склейка в центре, чёрный низ
                 LinearGradient(
                     stops: [
-                        .init(color: Color(hex: 0x1A2C4E), location: 0),
-                        .init(color: tunnel.status == .connected ? Color(hex: 0x2E7D5B) : Color(hex: 0x3A4A63), location: 0.45),
-                        .init(color: tunnel.status == .connected ? Color(hex: 0x86E29B) : Color(hex: 0x9AA7BC), location: 1.0),
+                        .init(color: tunnel.status == .connected ? Color(hex: 0x2FA96E) : Color(hex: 0x35507E), location: 0),
+                        .init(color: tunnel.status == .connected ? Color(hex: 0x0E3D2E) : Color(hex: 0x131B2B), location: 0.45),
+                        .init(color: .black, location: 1.0),
                     ],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
+                    startPoint: .top, endPoint: .bottom
                 )
-                .opacity(tunnel.status == .connected ? 0.55 : 0.35)
+                .animation(.easeInOut(duration: 0.6), value: tunnel.status)
                 .ignoresSafeArea()
 
                 if tunnel.status == .connected {
@@ -77,8 +77,6 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.title3.weight(.semibold))
-                            .frame(width: 40, height: 40)
-                            .glassCircle()
                     }
                 }
             }
