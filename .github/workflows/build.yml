@@ -72,7 +72,7 @@ jobs:
           if-no-files-found: error
 
       # GBox-источник: IPA + манифест (AltStore-формат) в gh-pages,
-      # раздаётся через https://l1ratch.github.io/WSBridge/
+      # раздаётся через https://l1ratch.github.io/WSBridge-iOS/
       - name: Publish to gh-pages
         run: |
           set -e
@@ -83,7 +83,7 @@ jobs:
           {
             "name": "WSBridge",
             "identifier": "wsbridge.gh",
-            "sourceURL": "https://l1ratch.github.io/WSBridge/source.json",
+            "sourceURL": "https://l1ratch.github.io/WSBridge-iOS/source.json",
             "apps": [
               {
                 "name": "WSBridge",
@@ -93,7 +93,7 @@ jobs:
                 "versionDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
                 "versionDescription": "build $VER",
                 "size": $SIZE,
-                "downloadURL": "https://l1ratch.github.io/WSBridge/wsb.ipa",
+                "downloadURL": "https://l1ratch.github.io/WSBridge-iOS/wsb.ipa",
                 "localizedDescription": "Telegram WS-туннель. Неподписанный IPA — GBox подпишет при установке."
               }
             ]

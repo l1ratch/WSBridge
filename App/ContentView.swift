@@ -280,7 +280,7 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Что это")
                         .font(.headline)
-                    Text("WSBridge — порт десктопного tg-ws-proxy на iOS. Приложение перехватывает TCP-трафик Telegram и перенаправляет его через WebSocket-мост Cloudflare к гейтвеям Telegram, минуя блокировки. Работает как VPN-профиль: включил — Telegram летает, выключил — обычный режим.")
+                    Text("WSBridge переносит Telegram-трафик через WebSocket-соединение к серверам Telegram, минуя сетевые блокировки. Работает как VPN: включил — Telegram работает, выключил — обычный режим. Настройка прокси внутри Telegram не нужна.")
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
@@ -294,9 +294,9 @@ struct AboutView: View {
                     Text("Данные")
                         .font(.headline)
                     LabeledContent("Версия", value: versionString)
-                    LabeledContent("Туннель", value: TunnelManager.providerBundleId)
-                    LabeledContent("Транспорт", value: "WebSocket (wss)")
-                    LabeledContent("Гейтвеи", value: "kws*.web.telegram.org")
+                    LabeledContent("Протокол", value: "MTProto поверх WebSocket (TLS)")
+                    LabeledContent("Серверы", value: "kws*.web.telegram.org")
+                    LabeledContent("Сеть", value: "Только трафик Telegram")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
@@ -308,7 +308,7 @@ struct AboutView: View {
                     Text("Разработчик")
                         .font(.headline)
                     LabeledContent("Автор", value: "l1ratch")
-                    Link(destination: URL(string: "https://github.com/l1ratch/WSBridge")!) {
+                    Link(destination: URL(string: "https://github.com/l1ratch/WSBridge-iOS")!) {
                         Label("Исходный код WSBridge", systemImage: "chevron.left.forwardslash.chevron.right")
                     }
                     Link(destination: URL(string: "https://github.com/Flowseal/tg-ws-proxy")!) {
