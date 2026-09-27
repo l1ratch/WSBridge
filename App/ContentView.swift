@@ -7,6 +7,7 @@ import UIKit
 struct ContentView: View {
     @StateObject private var tunnel = TunnelManager()
     @State private var showMenu = false
+    @State private var boltFill = false
 
     var body: some View {
         NavigationStack {
@@ -38,23 +39,39 @@ struct ContentView: View {
 
                 VStack(spacing: 48) {
                     // Молния — и индикатор, и кнопка: тап включает/выключает.
+                    // Анимация: цвет «заливает» молнию снизу вверх.
                     Button {
                         Task { await tunnel.toggle() }
                     } label: {
-                        Image(systemName: "bolt.fill")
-                            .font(.system(size: 140, weight: .bold))
-                            .foregroundStyle(
-                                tunnel.status == .connected
-                                ? AnyShapeStyle(LinearGradient(colors: [.white, .green],
-                                                               startPoint: .top, endPoint: .bottom))
-                                : AnyShapeStyle(Color(.systemGray2)))
-                            .shadow(color: tunnel.status == .connected ? .green.opacity(0.65) : .black.opacity(0.2),
-                                    radius: tunnel.status == .connected ? 40 : 8)
-                            .padding(56)
-                            .contentShape(Rectangle())
+                        ZStack {
+                            // База: серая молния
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 140, weight: .bold))
+                                .foregroundStyle(Color(.systemGray3))
+
+                            // Заливка: зелёная, растёт снизу вверх
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 140, weight: .bold))
+                                .foregroundStyle(Color(hex: 0x17A05E))
+                                .mask(alignment: .bottom) {
+                                    Rectangle()
+                                        .frame(height: boltFill ? 200 : 0)
+                                        .animation(.easeOut(duration: 0.5), value: boltFill)
+                                }
+                        }
+                        .shadow(color: boltFill ? Color(hex: 0x17A05E).opacity(0.6) : .black.opacity(0.2),
+                                radius: boltFill ? 40 : 8)
+                        .padding(56)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(tunnel.status == .connecting || tunnel.status == .disconnecting)
+                    .onChange(of: tunnel.status) { _, newStatus in
+                        boltFill = (newStatus == .connected)
+                    }
+                    .onAppear {
+                        boltFill = (tunnel.status == .connected)
+                    }
 
                     // Статус скрыт по просьбе владельца (не удалён).
                     Text(statusText)
@@ -184,6 +201,7 @@ struct JournalView: View {
                 .padding()
         }
         .navigationTitle("Журнал")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .bottomBar) {
                 Button {
@@ -236,6 +254,7 @@ struct StatsView: View {
                 .padding()
         }
         .navigationTitle("Статистика")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Обновить") { tunnel.fetchStats() }
