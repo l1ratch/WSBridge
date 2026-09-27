@@ -2,7 +2,17 @@
 
 Telegram на iOS без ручной настройки прокси.
 
-Включил туннель — Telegram работает через WebSocket-мост. Выключил — обычный режим.
+WSBridge — это VPN-туннель, который перехватывает трафик Telegram и перенаправляет его через WebSocket-соединение к серверам Telegram, минуя сетевые блокировки. Включил туннель — Telegram работает. Выключил — обычный режим. Настройка прокси внутри Telegram не нужна.
+
+## Установка
+
+Добавь источник в GBox / SideStore / AltStore:
+
+```
+https://l1ratch.github.io/WSBridge-iOS/source.json
+```
+
+Или скачай IPA из [Releases](https://github.com/l1ratch/WSBridge-iOS/releases) и подпиши своим dev-сертом.
 
 ## Как это работает
 
