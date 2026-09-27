@@ -172,53 +172,68 @@ struct JournalView: View {
     @ObservedObject var tunnel: TunnelManager
 
     var body: some View {
-        VStack(spacing: 0) {
-            if let journal = tunnel.journalText, !journal.isEmpty {
-                ScrollView {
-                    Text(journal)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                }
-            } else {
-                Spacer()
-                ProgressView()
-                Spacer()
-            }
-            HStack(spacing: 12) {
-                Button {
-                    tunnel.fetchStats()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.title3)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                }
-                .glassCapsule()
+        ZStack {
+            // Градиент под стеклом кнопок — есть что преломлять,
+            // нет однотонной подложки.
+            LinearGradient(
+                stops: [
+                    .init(color: Color(hex: 0x16233C), location: 0),
+                    .init(color: Color(hex: 0x0A0F1C), location: 1),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-                Button {
-                    UIPasteboard.general.string = tunnel.journalText ?? ""
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.title3)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+            VStack(spacing: 0) {
+                if let journal = tunnel.journalText, !journal.isEmpty {
+                    ScrollView {
+                        Text(journal)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                    }
+                } else {
+                    Spacer()
+                    ProgressView()
+                        .tint(.white)
+                    Spacer()
                 }
-                .glassCapsule()
-                .disabled((tunnel.journalText ?? "").isEmpty)
-
-                if let url = exportFileURL {
-                    ShareLink(item: url) {
-                        Image(systemName: "square.and.arrow.up")
+                HStack(spacing: 12) {
+                    Button {
+                        tunnel.fetchStats()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
                             .font(.title3)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                     }
-                    .glassCapsule()
+                    .glassCapsule(interactive: true)
+
+                    Button {
+                        UIPasteboard.general.string = tunnel.journalText ?? ""
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.title3)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .glassCapsule(interactive: true)
+                    .disabled((tunnel.journalText ?? "").isEmpty)
+
+                    if let url = exportFileURL {
+                        ShareLink(item: url) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.title3)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                        }
+                        .glassCapsule(interactive: true)
+                    }
                 }
+                .padding(10)
             }
-            .padding(10)
         }
         .navigationTitle("Журнал")
         .navigationBarTitleDisplayMode(.inline)
@@ -265,21 +280,22 @@ struct StatsView: View {
 
 // MARK: - Liquid Glass с деградацией
 
-/// Стеклянная капсула: iOS 26 — родной glassEffect; ниже — ultraThinMaterial.
+/// Стеклянная капсула: iOS 26 — родной glassEffect (+ interactive: живая
+/// деформация под пальцем); ниже — ultraThinMaterial.
 extension View {
     @ViewBuilder
-    func glassCapsule() -> some View {
+    func glassCapsule(interactive: Bool = false) -> some View {
         if #available(iOS 26.0, *) {
-            self.glassEffect(.regular, in: .capsule)
+            self.glassEffect(interactive ? .regular.interactive() : .regular, in: .capsule)
         } else {
             self.background(.ultraThinMaterial, in: .capsule)
         }
     }
 
     @ViewBuilder
-    func glassCircle() -> some View {
+    func glassCircle(interactive: Bool = false) -> some View {
         if #available(iOS 26.0, *) {
-            self.glassEffect(.regular, in: .circle)
+            self.glassEffect(interactive ? .regular.interactive() : .regular, in: .circle)
         } else {
             self.background(.ultraThinMaterial, in: .circle)
         }
