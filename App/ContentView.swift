@@ -19,28 +19,21 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
                 VStack(spacing: 44) {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 100))
-                        .foregroundStyle(tunnel.status == .connected ? .green : Color(.systemGray3))
-                        .shadow(color: tunnel.status == .connected ? .green.opacity(0.55) : .clear, radius: 28)
-                        .animation(.easeInOut(duration: 0.4), value: tunnel.status)
-
+                    // Молния — и индикатор, и кнопка: тап включает/выключает.
                     Button {
                         Task { await tunnel.toggle() }
                     } label: {
-                        ZStack {
-                            Circle()
-                                .fill(tunnel.status == .connected
-                                      ? AnyShapeStyle(LinearGradient(colors: [.green, Color.green.opacity(0.65)],
-                                                                     startPoint: .top, endPoint: .bottom))
-                                      : AnyShapeStyle(Color(.systemGray4)))
-                                .frame(width: 148, height: 148)
-                                .shadow(color: tunnel.status == .connected ? .green.opacity(0.45) : .black.opacity(0.15),
-                                        radius: 18, y: 8)
-                            Image(systemName: "power")
-                                .font(.system(size: 54, weight: .semibold))
-                                .foregroundStyle(.white)
-                        }
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 110, weight: .bold))
+                            .foregroundStyle(
+                                tunnel.status == .connected
+                                ? AnyShapeStyle(LinearGradient(colors: [.green, Color.green.opacity(0.75)],
+                                                               startPoint: .top, endPoint: .bottom))
+                                : AnyShapeStyle(Color(.systemGray3)))
+                            .shadow(color: tunnel.status == .connected ? .green.opacity(0.6) : .clear,
+                                    radius: tunnel.status == .connected ? 36 : 0)
+                            .padding(48)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(tunnel.status == .connecting || tunnel.status == .disconnecting)
