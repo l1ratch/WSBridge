@@ -11,29 +11,34 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Авторский градиент: цветной верх (синий → цвет состояния),
-                // насыщенное слияние в центре, чистая тьма к низу.
+                // Основа: однотонный тёмно-синий, почти чёрный.
+                Color(hex: 0x0A0F1E).ignoresSafeArea()
+
+                // Верхняя заливка: насыщенный цвет у верха, «плывёт» и
+                // растворяется к центру (состояние: зелёный / синий).
                 LinearGradient(
                     stops: [
-                        .init(color: Color(hex: 0x243B6B), location: 0.00),
-                        .init(color: tunnel.status == .connected ? Color(hex: 0x1E9E63) : Color(hex: 0x3D5A8F), location: 0.22),
-                        .init(color: tunnel.status == .connected ? Color(hex: 0x136B47) : Color(hex: 0x1B2942), location: 0.50),
-                        .init(color: Color(hex: 0x070D18), location: 0.80),
-                        .init(color: .black, location: 1.00),
+                        .init(color: topWashColor.opacity(0.95), location: 0),
+                        .init(color: topWashColor.opacity(0.55), location: 0.18),
+                        .init(color: topWashColor.opacity(0.22), location: 0.38),
+                        .init(color: .clear, location: 0.55),
                     ],
-                    startPoint: .topLeading, endPoint: .bottom
+                    startPoint: .top, endPoint: .center
                 )
-                .animation(.easeInOut(duration: 0.7), value: tunnel.status)
                 .ignoresSafeArea()
+                .animation(.easeInOut(duration: 0.7), value: tunnel.status)
 
-                if tunnel.status == .connected {
-                    Circle()
-                        .fill(Color(hex: 0x1E9E63).opacity(0.30))
-                        .frame(width: 460, height: 460)
-                        .blur(radius: 140)
-                        .offset(y: -60)
-                        .allowsHitTesting(false)
-                }
+                // Нижняя заливка: темнее основы, тоже тает к центру —
+                // оба цвета сливаются в середине без шва.
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(hex: 0x141C30).opacity(0.9), location: 0),
+                        .init(color: Color(hex: 0x141C30).opacity(0.45), location: 0.25),
+                        .init(color: .clear, location: 0.5),
+                    ],
+                    startPoint: .bottom, endPoint: .center
+                )
+                .ignoresSafeArea()
 
                 VStack(spacing: 48) {
                     // Молния — и индикатор, и кнопка: тап включает/выключает.
@@ -98,6 +103,11 @@ struct ContentView: View {
         case .disconnecting: "Отключение…"
         default: "Туннель выключен"
         }
+    }
+
+    /// Цвет верхней заливки: живой изумруд при работе, глубокий синий в покое.
+    private var topWashColor: Color {
+        tunnel.status == .connected ? Color(hex: 0x1FA968) : Color(hex: 0x2C4E86)
     }
 }
 
@@ -168,72 +178,53 @@ struct MenuView: View {
 }
 
 /// Журнал расширения: обновление, копирование, экспорт файлом через системный sheet.
+/// Компоненты — системные дефолты: на iOS 26 система сама рисует их Liquid Glass.
 struct JournalView: View {
     @ObservedObject var tunnel: TunnelManager
 
     var body: some View {
-        ZStack {
-            // Градиент под стеклом кнопок — есть что преломлять,
-            // нет однотонной подложки.
-            LinearGradient(
-                stops: [
-                    .init(color: Color(hex: 0x16233C), location: 0),
-                    .init(color: Color(hex: 0x0A0F1C), location: 1),
-                ],
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                if let journal = tunnel.journalText, !journal.isEmpty {
-                    ScrollView {
-                        Text(journal)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.92))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(10)
-                    }
-                } else {
-                    Spacer()
-                    ProgressView()
-                        .tint(.white)
-                    Spacer()
+        VStack(spacing: 0) {
+            if let journal = tunnel.journalText, !journal.isEmpty {
+                ScrollView {
+                    Text(journal)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
                 }
-                HStack(spacing: 12) {
-                    Button {
-                        tunnel.fetchStats()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.title3)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                    }
-                    .glassCapsule(interactive: true)
-
-                    Button {
-                        UIPasteboard.general.string = tunnel.journalText ?? ""
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                            .font(.title3)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                    }
-                    .glassCapsule(interactive: true)
-                    .disabled((tunnel.journalText ?? "").isEmpty)
-
-                    if let url = exportFileURL {
-                        ShareLink(item: url) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.title3)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                        }
-                        .glassCapsule(interactive: true)
-                    }
-                }
-                .padding(10)
+            } else {
+                Spacer()
+                ProgressView()
+                Spacer()
             }
+            Divider()
+            HStack(spacing: 14) {
+                Button {
+                    tunnel.fetchStats()
+                } label: {
+                    Label("Обновить", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    UIPasteboard.general.string = tunnel.journalText ?? ""
+                } label: {
+                    Label("Скопировать", systemImage: "doc.on.doc")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled((tunnel.journalText ?? "").isEmpty)
+
+                if let url = exportFileURL {
+                    ShareLink(item: url) {
+                        Label("Поделиться", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .padding(10)
         }
         .navigationTitle("Журнал")
         .navigationBarTitleDisplayMode(.inline)
