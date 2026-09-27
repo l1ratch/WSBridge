@@ -143,8 +143,15 @@ class TunnelSession {
 
     /// Данные от kws-гейтвея → клиенту через lwIP.
     /// WS-колбэк приходит с потока URLSession — гоним через очередь.
+    private var recvCount = 0
+
     private func handleWSData(_ data: Data) {
-        postEvent("ws_recv:c\(connId):\(data.count)B")
+        // ponytail: ws_recv на КАЖДЫЙ кадр затапливал журнал (200 мест)
+        // и слал Darwin-уведомление на фрейм — первые 3 и далее каждый 100-й.
+        recvCount += 1
+        if recvCount <= 3 || recvCount % 100 == 0 {
+            postEvent("ws_recv:c\(connId):n\(recvCount):\(data.count)B")
+        }
         if !headLogged {
             headLogged = true
             let head = data.prefix(16).map { String(format: "%02x", $0) }.joined()

@@ -38,6 +38,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
             NSLog("[WSBridge] tunnel started")
+            EventLog.loadPrevious()
             let proto = self?.protocolConfiguration as? NETunnelProviderProtocol
             let wd = (proto?.providerConfiguration?["worker"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -93,12 +94,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         io.schedule(deadline: .now() + 15, repeating: 15)
         io.setEventHandler { [weak self] in
             guard let self else { return }
-            EventLog.append("io:in=\(self.packetCount) out=\(EventLog.outPkts) v6=\(EventLog.inV6) oth=\(EventLog.inOther) wd=\(EventLog.wsDown) wf=\(EventLog.writeFails) up=\(EventLog.upBytes) rx=\(EventLog.rxBytes) pend=\(EventLog.pendCur) sent=\(EventLog.sentCb) inmem=\(lwip_bridge_inmem_drops())")
+            EventLog.append("io:in=\(self.packetCount) out=\(EventLog.outPkts) v6=\(EventLog.inV6) oth=\(EventLog.inOther) wd=\(EventLog.wsDown) wf=\(EventLog.writeFails) up=\(EventLog.upBytes) rx=\(EventLog.rxBytes) pend=\(EventLog.pendCur) sent=\(EventLog.sentCb) inmem=\(lwip_bridge_inmem_drops()) mem=\(String(format: "%.1f", self.memFootprintMB()))MB conns=\(self.sessions.count)")
             for (id, _) in self.sessions.sorted(by: { $0.key < $1.key }).prefix(2) {
                 var st: UInt32 = 0, un: UInt32 = 0
                 lwip_bridge_conn_stats(id, &st, &un)
                 EventLog.append("c\(id):st=\(st) un=\(un)")
             }
+            EventLog.flush() // свежий файл даже при краше между append-порогами
         }
         io.resume()
         ioTimer = io
@@ -160,12 +162,29 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         )
     }
 
+    /// phys_footprint — то, по чему jetsam судит расширение (~50MB лимит).
+    private func memFootprintMB() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.stride / MemoryLayout<integer_t>.stride)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576.0 : -1
+    }
+
     override func stopTunnel(
         with reason: NEProviderStopReason,
         completionHandler: @escaping () -> Void
     ) {
         NSLog("[WSBridge] tunnel stopped (reason=%ld, pkts=%llu, bytes=%llu)",
               reason.rawValue, packetCount, byteCount)
+        // reason: 0=none 1=user 2=providerFailed 3=sleep 4=appUpdate
+        // 5=providerDisabled 6=badConfiguration 7=systemPolicy 8=evalFailed
+        // 9=configurationDisabled 10=configurationInvalid ...
+        EventLog.append("tunnel_stop:reason=\(reason.rawValue):pkts=\(packetCount)")
+        EventLog.flush()
         journalServer.stop()
         pollTimer?.cancel(); pollTimer = nil
         ioTimer?.cancel(); ioTimer = nil
