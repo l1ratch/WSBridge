@@ -79,6 +79,7 @@ jobs:
           VER=$(grep -m1 'CFBundleVersion' project.yml | sed -E 's/.*"([0-9]+)".*/\1/')
           SIZE=$(stat -f%z WSBridge.ipa)
           cp WSBridge.ipa /tmp/wsb.ipa
+          cp WSBridge.ipa /tmp/preview.ipa
           cat > /tmp/source.json <<EOF
           {
             "name": "WSBridge",
@@ -109,3 +110,17 @@ jobs:
           git add -f wsb.ipa source.json
           git commit -m "publish build $VER" || echo "no changes"
           git push -f origin gh-pages
+
+      # Каждый пуш в main обновляет prerelease "preview" с последним IPA.
+      # Стабильные релизы — через теги v* (release.yml).
+      - name: Update preview release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete preview --yes 2>/dev/null || true
+          git push origin :refs/tags/preview 2>/dev/null || true
+          gh release create preview \
+            /tmp/preview.ipa \
+            --title "Preview (latest main)" \
+            --notes "Дев-сборка с последнего пуша в main. Для стабильных версий — Releases." \
+            --prerelease
