@@ -11,24 +11,27 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Градиент: живой цветной верх, склейка в центре, чёрный низ
+                // Авторский градиент: цветной верх (синий → цвет состояния),
+                // насыщенное слияние в центре, чистая тьма к низу.
                 LinearGradient(
                     stops: [
-                        .init(color: tunnel.status == .connected ? Color(hex: 0x2FA96E) : Color(hex: 0x35507E), location: 0),
-                        .init(color: tunnel.status == .connected ? Color(hex: 0x0E3D2E) : Color(hex: 0x131B2B), location: 0.45),
-                        .init(color: .black, location: 1.0),
+                        .init(color: Color(hex: 0x243B6B), location: 0.00),
+                        .init(color: tunnel.status == .connected ? Color(hex: 0x1E9E63) : Color(hex: 0x3D5A8F), location: 0.22),
+                        .init(color: tunnel.status == .connected ? Color(hex: 0x136B47) : Color(hex: 0x1B2942), location: 0.50),
+                        .init(color: Color(hex: 0x070D18), location: 0.80),
+                        .init(color: .black, location: 1.00),
                     ],
-                    startPoint: .top, endPoint: .bottom
+                    startPoint: .topLeading, endPoint: .bottom
                 )
-                .animation(.easeInOut(duration: 0.6), value: tunnel.status)
+                .animation(.easeInOut(duration: 0.7), value: tunnel.status)
                 .ignoresSafeArea()
 
                 if tunnel.status == .connected {
                     Circle()
-                        .fill(Color.green.opacity(0.30))
-                        .frame(width: 420, height: 420)
-                        .blur(radius: 130)
-                        .offset(y: -40)
+                        .fill(Color(hex: 0x1E9E63).opacity(0.30))
+                        .frame(width: 460, height: 460)
+                        .blur(radius: 140)
+                        .offset(y: -60)
                         .allowsHitTesting(false)
                 }
 
@@ -187,27 +190,30 @@ struct JournalView: View {
                 Button {
                     tunnel.fetchStats()
                 } label: {
-                    Label("Обновить", systemImage: "arrow.clockwise")
+                    Image(systemName: "arrow.clockwise")
+                        .font(.title3)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 10)
                 }
                 .glassCapsule()
 
                 Button {
                     UIPasteboard.general.string = tunnel.journalText ?? ""
                 } label: {
-                    Label("Скопировать", systemImage: "doc.on.doc")
+                    Image(systemName: "doc.on.doc")
+                        .font(.title3)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 10)
                 }
                 .glassCapsule()
                 .disabled((tunnel.journalText ?? "").isEmpty)
 
                 if let url = exportFileURL {
                     ShareLink(item: url) {
-                        Label("Поделиться", systemImage: "square.and.arrow.up")
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.title3)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 10)
                     }
                     .glassCapsule()
                 }
