@@ -7,38 +7,36 @@ import UIKit
 struct ContentView: View {
     @StateObject private var tunnel = TunnelManager()
     @State private var showMenu = false
+    @State private var glowPulse = false
 
     var body: some View {
         NavigationStack {
             ZStack {
-                // Основа: однотонный тёмно-синий, почти чёрный.
-                Color(hex: 0x0A0F1E).ignoresSafeArea()
+                // Точка слияния: глубокий нейтральный navy — цвет центра,
+                // куда оба свечения растворяются.
+                Color(hex: 0x0D1526).ignoresSafeArea()
 
-                // Верхняя заливка: насыщенный цвет у верха, «плывёт» и
-                // растворяется к центру (состояние: зелёный / синий).
-                LinearGradient(
-                    stops: [
-                        .init(color: topWashColor.opacity(0.95), location: 0),
-                        .init(color: topWashColor.opacity(0.55), location: 0.18),
-                        .init(color: topWashColor.opacity(0.22), location: 0.38),
-                        .init(color: .clear, location: 0.55),
-                    ],
-                    startPoint: .top, endPoint: .center
-                )
-                .ignoresSafeArea()
-                .animation(.easeInOut(duration: 0.7), value: tunnel.status)
+                // Верхнее свечение: насыщенный цвет состояния (изумруд / синий),
+                // гауссов спад — физически гладкий, без полос и швов.
+                Ellipse()
+                    .fill(topWashColor)
+                    .frame(width: 560, height: 520)
+                    .blur(radius: 110)
+                    .opacity(0.55)
+                    .offset(y: -250)
+                    .scaleEffect(glowPulse ? 1.06 : 1.0)
+                    .animation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: glowPulse)
+                    .animation(.easeInOut(duration: 0.8), value: tunnel.status)
+                    .ignoresSafeArea()
 
-                // Нижняя заливка: темнее основы, тоже тает к центру —
-                // оба цвета сливаются в середине без шва.
-                LinearGradient(
-                    stops: [
-                        .init(color: Color(hex: 0x141C30).opacity(0.9), location: 0),
-                        .init(color: Color(hex: 0x141C30).opacity(0.45), location: 0.25),
-                        .init(color: .clear, location: 0.5),
-                    ],
-                    startPoint: .bottom, endPoint: .center
-                )
-                .ignoresSafeArea()
+                // Нижняя глубина: почти чёрный синий, тоже тает к центру.
+                Ellipse()
+                    .fill(Color(hex: 0x040810))
+                    .frame(width: 700, height: 480)
+                    .blur(radius: 130)
+                    .opacity(0.85)
+                    .offset(y: 400)
+                    .ignoresSafeArea()
 
                 VStack(spacing: 48) {
                     // Молния — и индикатор, и кнопка: тап включает/выключает.
@@ -77,6 +75,7 @@ struct ContentView: View {
                     }
                 }
             }
+            .onAppear { glowPulse = true }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -105,9 +104,9 @@ struct ContentView: View {
         }
     }
 
-    /// Цвет верхней заливки: живой изумруд при работе, глубокий синий в покое.
+    /// Цвет верхнего свечения: живой изумруд при работе, глубокий индиго в покое.
     private var topWashColor: Color {
-        tunnel.status == .connected ? Color(hex: 0x1FA968) : Color(hex: 0x2C4E86)
+        tunnel.status == .connected ? Color(hex: 0x17A05E) : Color(hex: 0x1E3A6E)
     }
 }
 
