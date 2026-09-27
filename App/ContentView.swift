@@ -89,6 +89,18 @@ struct ContentView: View {
                             .glassCapsule()
                     }
                 }
+
+                // Версия и копирайт внизу
+                VStack(spacing: 2) {
+                    Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.35))
+                    Text("© 2026 l1ratch")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.25))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 12)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -280,23 +292,9 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Что это")
                         .font(.headline)
-                    Text("WSBridge переносит Telegram-трафик через WebSocket-соединение к серверам Telegram, минуя сетевые блокировки. Работает как VPN: включил — Telegram работает, выключил — обычный режим. Настройка прокси внутри Telegram не нужна.")
+                    Text("WSBridge — это VPN-туннель, который перехватывает трафик Telegram и перенаправляет его через WebSocket-соединение к серверам Telegram, минуя сетевые блокировки. Включил туннель — Telegram работает. Выключил — обычный режим. Настройка прокси внутри Telegram не нужна.")
                         .font(.body)
                         .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
-
-                Divider().padding(.horizontal, 24)
-
-                // Данные
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Данные")
-                        .font(.headline)
-                    LabeledContent("Версия", value: versionString)
-                    LabeledContent("Протокол", value: "MTProto поверх WebSocket (TLS)")
-                    LabeledContent("Серверы", value: "kws*.web.telegram.org")
-                    LabeledContent("Сеть", value: "Только трафик Telegram")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
