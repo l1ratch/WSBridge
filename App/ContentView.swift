@@ -154,11 +154,11 @@ struct MenuView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section("Информация") {
-                    LabeledContent("Версия", value: versionString)
-                    LabeledContent("Туннель", value: TunnelManager.providerBundleId)
-                    Text("Telegram через WebSocket-мост Cloudflare (порт tg-ws-proxy). Пустое поле worker'а = общие kws-фронты — рекомендуется.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    NavigationLink {
+                        AboutView()
+                    } label: {
+                        Label("О программе", systemImage: "info.circle")
+                    }
                 }
             }
             .navigationTitle("Меню")
@@ -168,12 +168,6 @@ struct MenuView: View {
                 }
             }
         }
-    }
-
-    private var versionString: String {
-        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        return "\(v) (\(b))"
     }
 
     private var workerHint: String {
@@ -264,7 +258,79 @@ struct StatsView: View {
     }
 }
 
-// MARK: - Liquid Glass с деградацией
+/// О программе: суть, версия, разработчик, ссылка на исходник.
+struct AboutView: View {
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                // Иконка
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 64, weight: .bold))
+                    .foregroundStyle(Color(hex: 0x17A05E))
+                    .padding(.top, 32)
+
+                Text("WSBridge")
+                    .font(.title.weight(.bold))
+
+                Text(versionString)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                // Суть
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Что это")
+                        .font(.headline)
+                    Text("WSBridge — порт десктопного tg-ws-proxy на iOS. Приложение перехватывает TCP-трафик Telegram и перенаправляет его через WebSocket-мост Cloudflare к гейтвеям Telegram, минуя блокировки. Работает как VPN-профиль: включил — Telegram летает, выключил — обычный режим.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+
+                Divider().padding(.horizontal, 24)
+
+                // Данные
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Данные")
+                        .font(.headline)
+                    LabeledContent("Версия", value: versionString)
+                    LabeledContent("Туннель", value: TunnelManager.providerBundleId)
+                    LabeledContent("Транспорт", value: "WebSocket (wss)")
+                    LabeledContent("Гейтвеи", value: "kws*.web.telegram.org")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+
+                Divider().padding(.horizontal, 24)
+
+                // Разработчик
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Разработчик")
+                        .font(.headline)
+                    LabeledContent("Автор", value: "l1ratch")
+                    Link(destination: URL(string: "https://github.com/l1ratch/WSBridge")!) {
+                        Label("Исходный код WSBridge", systemImage: "chevron.left.forwardslash.chevron.right")
+                    }
+                    Link(destination: URL(string: "https://github.com/Flowseal/tg-ws-proxy")!) {
+                        Label("Оригинал: tg-ws-proxy (Flowseal)", systemImage: "arrow.up.right.square")
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+
+                Spacer(minLength: 40)
+            }
+        }
+        .navigationTitle("О программе")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var versionString: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "\(v) (\(b))"
+    }
+}
 
 extension View {
     @ViewBuilder
