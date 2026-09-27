@@ -3,6 +3,7 @@ import NetworkExtension
 import UIKit
 
 /// Главный экран: только молния-кнопка. Меню — системный ellipsis сверху справа.
+/// iOS 26: настоящий Liquid Glass (glassEffect); 17-25: деградация в material.
 struct ContentView: View {
     @StateObject private var tunnel = TunnelManager()
     @State private var showMenu = false
@@ -31,7 +32,7 @@ struct ContentView: View {
                         .allowsHitTesting(false)
                 }
 
-                VStack(spacing: 44) {
+                VStack(spacing: 48) {
                     // Молния — и индикатор, и кнопка: тап включает/выключает.
                     Button {
                         Task { await tunnel.toggle() }
@@ -56,14 +57,15 @@ struct ContentView: View {
                         .font(.headline)
                         .foregroundStyle(.secondary)
                         .hidden()
+
                     if let errorMessage = tunnel.errorMessage {
                         Text(errorMessage)
                             .font(.caption)
                             .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                            .padding(10)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .glassCapsule()
                     }
                 }
             }
@@ -75,6 +77,8 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.title3.weight(.semibold))
+                            .frame(width: 40, height: 40)
+                            .glassCircle()
                     }
                 }
             }
@@ -96,14 +100,14 @@ struct ContentView: View {
     }
 }
 
-/// Меню: штатный системный Form (на iOS 26 система сама нарисует Liquid Glass).
+/// Меню: List (не Form — Form глушит glassEffect на рядах) + стеклянные кнопки.
 struct MenuView: View {
     @ObservedObject var tunnel: TunnelManager
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            Form {
+            List {
                 Section("Диагностика") {
                     NavigationLink {
                         JournalView(tunnel: tunnel)
@@ -138,6 +142,7 @@ struct MenuView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Готово") { dismiss() }
+                        .bold()
                 }
             }
         }
@@ -180,34 +185,33 @@ struct JournalView: View {
                 ProgressView()
                 Spacer()
             }
-            Divider()
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 Button {
                     tunnel.fetchStats()
                 } label: {
                     Label("Обновить", systemImage: "arrow.clockwise")
                         .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
                 }
-                .buttonStyle(.bordered)
-                .contentShape(Rectangle())
+                .glassCapsule()
 
                 Button {
                     UIPasteboard.general.string = tunnel.journalText ?? ""
                 } label: {
                     Label("Скопировать", systemImage: "doc.on.doc")
                         .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
                 }
-                .buttonStyle(.bordered)
-                .contentShape(Rectangle())
+                .glassCapsule()
                 .disabled((tunnel.journalText ?? "").isEmpty)
 
                 if let url = exportFileURL {
                     ShareLink(item: url) {
                         Label("Поделиться", systemImage: "square.and.arrow.up")
                             .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
                     }
-                    .buttonStyle(.bordered)
-                    .contentShape(Rectangle())
+                    .glassCapsule()
                 }
             }
             .padding(10)
@@ -252,6 +256,29 @@ struct StatsView: View {
             }
         }
         .onAppear { tunnel.fetchStats() }
+    }
+}
+
+// MARK: - Liquid Glass с деградацией
+
+/// Стеклянная капсула: iOS 26 — родной glassEffect; ниже — ultraThinMaterial.
+extension View {
+    @ViewBuilder
+    func glassCapsule() -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: .capsule)
+        } else {
+            self.background(.ultraThinMaterial, in: .capsule)
+        }
+    }
+
+    @ViewBuilder
+    func glassCircle() -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: .circle)
+        } else {
+            self.background(.ultraThinMaterial, in: .circle)
+        }
     }
 }
 

@@ -11,7 +11,7 @@ permissions:
 jobs:
   build_ipa:
     name: Build iOS Unsigned IPA
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -20,11 +20,10 @@ jobs:
 
       - name: Set Xcode Version
         run: |
-          if [ -d "/Applications/Xcode_16.4.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
-          elif [ -d "/Applications/Xcode_16.2.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
-          fi
+          # Prefer Xcode 26 (iOS 26 SDK: настоящий Liquid Glass). Фолбэк - 16.x.
+          ls /Applications/ | grep -i xcode
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XC/Contents/Developer"
           xcodebuild -version
 
       - name: Generate Xcode Project
@@ -41,7 +40,21 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             DEBUG_INFORMATION_FORMAT=dwarf \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            build
+            build 2>&1 | tee build_output.log
+        shell: bash
+
+      # Идея из l1ratch/AnimeGen: ошибки компиляции коммитятся в compile_error.txt
+      - name: Commit error log on failure
+        if: failure()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "=== COMPILER ERRORS ===" > compile_error.txt
+          grep -E "(: error:|fatal error:)" build_output.log -B 2 -A 5 >> compile_error.txt || tail -n 200 build_output.log >> compile_error.txt
+          git add compile_error.txt
+          git commit -m "ci: capture compiler error [skip ci]" || true
+          git push origin main || true
+        shell: bash
 
       - name: Package Unsigned IPA
         run: |
