@@ -7,7 +7,6 @@ import UIKit
 struct ContentView: View {
     @StateObject private var tunnel = TunnelManager()
     @State private var showMenu = false
-    @State private var glowPulse = false
 
     var body: some View {
         NavigationStack {
@@ -17,15 +16,14 @@ struct ContentView: View {
                 Color(hex: 0x0D1526).ignoresSafeArea()
 
                 // Верхнее свечение: насыщенный цвет состояния (изумруд / синий),
-                // гауссов спад — физически гладкий, без полос и швов.
+                // гауссов спад — гладкий, без полос и швов. Статично;
+                // анимация только при смене состояния (crossfade цвета).
                 Ellipse()
                     .fill(topWashColor)
                     .frame(width: 560, height: 520)
                     .blur(radius: 110)
                     .opacity(0.55)
                     .offset(y: -250)
-                    .scaleEffect(glowPulse ? 1.06 : 1.0)
-                    .animation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: glowPulse)
                     .animation(.easeInOut(duration: 0.8), value: tunnel.status)
                     .ignoresSafeArea()
 
@@ -75,7 +73,6 @@ struct ContentView: View {
                     }
                 }
             }
-            .onAppear { glowPulse = true }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -110,43 +107,59 @@ struct ContentView: View {
     }
 }
 
-/// Меню: List (не Form — Form глушит glassEffect на рядах) + стеклянные кнопки.
+/// Меню: стеклянные карточки-секции в стиле iOS 26.
 struct MenuView: View {
     @ObservedObject var tunnel: TunnelManager
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Диагностика") {
-                    NavigationLink {
-                        JournalView(tunnel: tunnel)
-                    } label: {
-                        Label("Журнал туннеля", systemImage: "doc.text")
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Диагностика
+                    glassSection(title: "Диагностика", icon: "stethoscope") {
+                        NavigationLink {
+                            JournalView(tunnel: tunnel)
+                        } label: {
+                            menuRow(icon: "doc.text", title: "Журнал туннеля")
+                        }
+                        .buttonStyle(.plain)
+
+                        Divider().opacity(0.4)
+
+                        NavigationLink {
+                            StatsView(tunnel: tunnel)
+                        } label: {
+                            menuRow(icon: "chart.bar", title: "Статистика")
+                        }
+                        .buttonStyle(.plain)
                     }
-                    NavigationLink {
-                        StatsView(tunnel: tunnel)
-                    } label: {
-                        Label("Статистика", systemImage: "chart.bar")
+
+                    // Настройки
+                    glassSection(title: "Настройки", icon: "gearshape") {
+                        TextField("CF worker или реле ip:port", text: $tunnel.workerDomain)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .disabled(tunnel.status == .connected)
+                            .padding(12)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                        Text(workerHint)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // Информация
+                    glassSection(title: "Информация", icon: "info.circle") {
+                        LabeledContent("Версия", value: versionString)
+                        LabeledContent("Туннель", value: TunnelManager.providerBundleId)
+                        Text("Telegram через WebSocket-мост Cloudflare (порт tg-ws-proxy). Пустое поле worker'а = общие kws-фронты — рекомендуется.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                Section("Настройки") {
-                    TextField("CF worker или реле ip:port", text: $tunnel.workerDomain)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .disabled(tunnel.status == .connected)
-                    Text(workerHint)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Section("Информация") {
-                    LabeledContent("Версия", value: versionString)
-                    LabeledContent("Туннель", value: TunnelManager.providerBundleId)
-                    Text("Telegram через WebSocket-мост Cloudflare (порт tg-ws-proxy). Пустое поле worker'а = общие kws-фронты — рекомендуется.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .padding(16)
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("Меню")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -155,6 +168,33 @@ struct MenuView: View {
                         .bold()
                 }
             }
+        }
+    }
+
+    private func glassSection<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard()
+    }
+
+    private func menuRow(icon: String, title: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(.tint)
+                .frame(width: 34)
+            Text(title)
+                .foregroundStyle(.primary)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
     }
 
@@ -176,8 +216,7 @@ struct MenuView: View {
     }
 }
 
-/// Журнал расширения: обновление, копирование, экспорт файлом через системный sheet.
-/// Компоненты — системные дефолты: на iOS 26 система сама рисует их Liquid Glass.
+/// Журнал расширения: моноширинный текст, стеклянный тулбар снизу.
 struct JournalView: View {
     @ObservedObject var tunnel: TunnelManager
 
@@ -189,41 +228,36 @@ struct JournalView: View {
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
+                        .padding(12)
                 }
             } else {
                 Spacer()
                 ProgressView()
                 Spacer()
             }
-            Divider()
-            HStack(spacing: 14) {
-                Button {
+
+            // Стеклянный тулбар
+            HStack(spacing: 0) {
+                toolbarButton(icon: "arrow.clockwise", label: "Обновить") {
                     tunnel.fetchStats()
-                } label: {
-                    Label("Обновить", systemImage: "arrow.clockwise")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-
-                Button {
+                toolbarButton(icon: "doc.on.doc", label: "Скопировать") {
                     UIPasteboard.general.string = tunnel.journalText ?? ""
-                } label: {
-                    Label("Скопировать", systemImage: "doc.on.doc")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
                 .disabled((tunnel.journalText ?? "").isEmpty)
-
                 if let url = exportFileURL {
                     ShareLink(item: url) {
-                        Label("Поделиться", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity)
+                        VStack(spacing: 4) {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Поделиться").font(.caption2)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(10)
+            .padding(.vertical, 10)
+            .glassToolbar()
         }
         .navigationTitle("Журнал")
         .navigationBarTitleDisplayMode(.inline)
@@ -232,7 +266,17 @@ struct JournalView: View {
         }
     }
 
-    /// Журнал файлом во временную папку — для системного «Поделиться».
+    private func toolbarButton(icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                Text(label).font(.caption2)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var exportFileURL: URL? {
         guard let text = tunnel.journalText, !text.isEmpty else { return nil }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("WSBridge-journal.log")
@@ -270,9 +314,33 @@ struct StatsView: View {
 
 // MARK: - Liquid Glass с деградацией
 
-/// Стеклянная капсула: iOS 26 — родной glassEffect (+ interactive: живая
-/// деформация под пальцем); ниже — ultraThinMaterial.
 extension View {
+    /// Стеклянная карточка-секция: iOS 26 — glassEffect, ниже — material.
+    @ViewBuilder
+    func glassCard() -> some View {
+        if #available(iOS 26.0, *) {
+            self
+                .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        } else {
+            self
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22)
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                )
+        }
+    }
+
+    /// Стеклянный тулбар (полоса внизу): iOS 26 — glassEffect, ниже — material.
+    @ViewBuilder
+    func glassToolbar() -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: .rect(cornerRadius: 18))
+        } else {
+            self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
     @ViewBuilder
     func glassCapsule(interactive: Bool = false) -> some View {
         if #available(iOS 26.0, *) {
