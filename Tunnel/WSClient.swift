@@ -80,6 +80,34 @@ final class WSClient {
     /// эндпоинте каскада — при failover старый task со своим init выбрасывается.
     private static var rrStart = 0
 
+    /// Кэш здоровья эндпоинтов: упавший (timeout/ошибка до первых данных)
+    /// исключается из каскадов на 10 минут. Убирает долбёжку мёртвых фронтов
+    /// кругами (батарея/CPU/лог-шум), когда SwiftGram держит ~12 соединений.
+    /// Если отфильтровать нечего — пробуем всё (фронты могут ожить волной).
+    private static var deadUntil: [String: Date] = [:]
+    private static let healthLock = NSLock()
+
+    static func markDead(_ host: String) {
+        healthLock.lock(); defer { healthLock.unlock() }
+        deadUntil[host] = Date().addingTimeInterval(600)
+    }
+
+    static func markAlive(_ host: String) {
+        healthLock.lock(); defer { healthLock.unlock() }
+        deadUntil.removeValue(forKey: host)
+    }
+
+    private static func aliveOnly(_ eps: [(host: String, hostHeader: String?)]) -> [(host: String, hostHeader: String?)] {
+        healthLock.lock(); defer { healthLock.unlock() }
+        let now = Date()
+        return eps.filter { ep in
+            guard let until = deadUntil[ep.host] else { return true }
+            if until > now { return false }
+            deadUntil.removeValue(forKey: ep.host)
+            return true
+        }
+    }
+
     func connect(dc: Int, isMedia: Bool, isTestDC: Bool, initFrame: Data, onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
         let path = isTestDC ? "/apiws_test" : "/apiws"
         self.initFrame = initFrame
@@ -99,7 +127,8 @@ final class WSClient {
         endpoints += Self.gatewayIPs.map { ($0, gwHost as String?) }
         endpoints.append((gwHost, nil))
 
-        tryConnect(endpoints: endpoints, path: path, index: 0, onMessage: onMessage, onClose: onClose)
+        let healthy = Self.aliveOnly(endpoints)
+        tryConnect(endpoints: healthy.isEmpty ? endpoints : healthy, path: path, index: 0, onMessage: onMessage, onClose: onClose)
     }
 
     private func tryConnect(endpoints: [(host: String, hostHeader: String?)], path: String, index: Int, onMessage: @escaping (Data) -> Void, onClose: @escaping () -> Void) {
@@ -167,13 +196,20 @@ final class WSClient {
                 self.connected = true
                 if case .data(let data) = message {
                     self.firstRecv = true
+                    Self.markAlive(ep.host)
                     onMessage(data)
                 }
                 self.receiveLoop(onMessage: onMessage, onClose: onClose)
             case .failure(let error):
                 NSLog("[WSBridge] WS: \(ep.host) failed (\(error.localizedDescription)), next")
                 post("ws_err:\(ep.host):\(error.localizedDescription)")
-                self.firstRecv ? fail() : advance()
+                if self.firstRecv {
+                    Self.markAlive(ep.host) // умерла живая сессия — эндпоинт не виноват
+                    fail()
+                } else {
+                    Self.markDead(ep.host)
+                    advance()
+                }
             }
         }
 
@@ -184,6 +220,7 @@ final class WSClient {
             guard !state.delivered, state.claim() else { return }
             NSLog("[WSBridge] WS: \(ep.host) connect timed out, trying next")
             self.post("ws_timeout:\(ep.host)")
+            Self.markDead(ep.host)
             wsTask.cancel(with: .goingAway, reason: nil)
             self.task = nil
             self.tryConnect(endpoints: endpoints, path: path, index: index + 1, onMessage: onMessage, onClose: onClose)
