@@ -1,6 +1,5 @@
 import NetworkExtension
 import Foundation
-import Network
 
 /// Фаза 2: lwIP + WS-сплайсинг.
 /// Перехватывает TCP к DC Telegram, восстанавливает поток через lwIP,
@@ -19,7 +18,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var pollTimer: DispatchSourceTimer?
     private var ioTimer: DispatchSourceTimer?
     private var workerDomain: String?
-    private var dnsForwarder: DNSForwarder?
 
     override func startTunnel(
         options: [String: NSObject]?,
@@ -27,7 +25,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     ) {
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "198.18.0.1")
         let ipv4 = NEIPv4Settings(addresses: ["198.18.0.2"], subnetMasks: ["255.255.255.255"])
-        var routes = TelegramDCs.includedRoutes
+        ipv4.includedRoutes = TelegramDCs.includedRoutes
         settings.ipv4Settings = ipv4
         // IPv6 НЕ анонсируем: lwIP у нас v4-only, анонсированный v6-маршрут
         // был чёрной дырой — Telegram ломился в v6 DC и висел до таймаута.
@@ -36,17 +34,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let proto = protocolConfiguration as? NETunnelProviderProtocol
         let dnsList = proto?.providerConfiguration?["dns"] as? [String]
         if let dnsList, !dnsList.isEmpty {
+            // Говорим системе "используй эти DNS". Запросы идут напрямую
+            // (вне туннеля) — DNS-IP НЕ добавляем в includedRoutes, иначе
+            // ломается вся маршрутизация (in=0).
             settings.dnsSettings = NEDNSSettings(servers: dnsList)
-            // DNS-серверы должны идти через туннель, иначе запросы блокируются.
-            for dnsIP in dnsList {
-                routes.append(NEIPv4Route(destinationAddress: dnsIP, subnetMask: "255.255.255.255"))
-            }
-            NSLog("[WSBridge] DNS: \(dnsList.joined(separator: ", ")) (routed via tunnel)")
-            dnsForwarder = DNSForwarder(dnsServers: dnsList) { [weak self] data in
-                self?.writePacket(data)
-            }
+            NSLog("[WSBridge] DNS: \(dnsList.joined(separator: ", "))")
         }
-        ipv4.includedRoutes = routes
 
         setTunnelNetworkSettings(settings) { [weak self] error in
             if let error {
@@ -148,13 +141,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                         EventLog.inV6 += 1
                         continue
                     }
-                    // DNS-запросы (UDP:53) перехватываем и форвардим напрямую,
-                    // минуя lwIP (он обрабатывает только TCP к DC Telegram).
-                    if let forwarder = self.dnsForwarder, forwarder.tryHandle(packet) {
-                        EventLog.inOther += 1
-                        continue
-                    }
-                    // Только TCP в lwIP; остальной UDP (QUIC и т.п.) роняем.
+                    // Только TCP в lwIP; UDP (DNS, QUIC) роняем.
                     guard packet.count > 9, packet[9] == 6 else {
                         EventLog.inOther += 1
                         continue
@@ -209,8 +196,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         EventLog.append("tunnel_stop:reason=\(reason.rawValue):pkts=\(packetCount)")
         EventLog.flush()
         journalServer.stop()
-        dnsForwarder?.stop()
-        dnsForwarder = nil
         pollTimer?.cancel(); pollTimer = nil
         ioTimer?.cancel(); ioTimer = nil
         lwipQueue.sync {
