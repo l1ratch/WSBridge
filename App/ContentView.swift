@@ -74,27 +74,23 @@ struct ContentView: View {
                         boltFill = (tunnel.status == .connected)
                     }
 
-                    // DNS-бар: нативная кнопка, открывает sheet
+                    // DNS-строка. Фон НЕ рисуем сами: свой material/glassEffect
+                    // на этом девайсе разъезжался в пустую полосу на всю ширину
+                    // (полоса 0..1124px при padding 40). Системный .bordered сам
+                    // даёт нативное стекло на iOS 26.
                     Button {
                         showDNS = true
                     } label: {
-                        HStack(spacing: 10) {
+                        HStack(spacing: 8) {
                             Image(systemName: "network")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
                             Text(dnsLabel)
-                                .font(.subheadline)
-                            Spacer()
                             Circle()
                                 .fill(tunnel.activeDNSServers.isEmpty ? Color(.systemGray3) : Color(hex: 0x17A05E))
                                 .frame(width: 8, height: 8)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(.ultraThinMaterial, in: Capsule())
                     }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 40)
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
 
                     // Статус скрыт по просьбе владельца (не удалён).
                     Text(statusText)
