@@ -1,5 +1,6 @@
 import NetworkExtension
 import Foundation
+import Network
 
 /// Фаза 2: lwIP + WS-сплайсинг.
 /// Перехватывает TCP к DC Telegram, восстанавливает поток через lwIP,
@@ -18,6 +19,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var pollTimer: DispatchSourceTimer?
     private var ioTimer: DispatchSourceTimer?
     private var workerDomain: String?
+    private var dnsForwarder: DNSForwarder?
 
     override func startTunnel(
         options: [String: NSObject]?,
@@ -36,6 +38,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         if let dnsList, !dnsList.isEmpty {
             settings.dnsSettings = NEDNSSettings(servers: dnsList)
             NSLog("[WSBridge] DNS: \(dnsList.joined(separator: ", "))")
+            dnsForwarder = DNSForwarder(dnsServers: dnsList) { [weak self] data in
+                self?.writePacket(data)
+            }
         }
 
         setTunnelNetworkSettings(settings) { [weak self] error in
@@ -138,7 +143,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                         EventLog.inV6 += 1
                         continue
                     }
-                    // Только TCP в lwIP; UDP (DNS мимо туннеля, QUIC) считаем и роняем.
+                    // DNS-запросы (UDP:53) перехватываем и форвардим напрямую,
+                    // минуя lwIP (он обрабатывает только TCP к DC Telegram).
+                    if let forwarder = self.dnsForwarder, forwarder.tryHandle(packet) {
+                        EventLog.inOther += 1
+                        continue
+                    }
+                    // Только TCP в lwIP; остальной UDP (QUIC и т.п.) роняем.
                     guard packet.count > 9, packet[9] == 6 else {
                         EventLog.inOther += 1
                         continue
@@ -193,6 +204,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         EventLog.append("tunnel_stop:reason=\(reason.rawValue):pkts=\(packetCount)")
         EventLog.flush()
         journalServer.stop()
+        dnsForwarder?.stop()
+        dnsForwarder = nil
         pollTimer?.cancel(); pollTimer = nil
         ioTimer?.cancel(); ioTimer = nil
         lwipQueue.sync {

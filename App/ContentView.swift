@@ -74,10 +74,8 @@ struct ContentView: View {
                         boltFill = (tunnel.status == .connected)
                     }
 
-                    // DNS-строка. Фон НЕ рисуем сами: свой material/glassEffect
-                    // на этом девайсе разъезжался в пустую полосу на всю ширину
-                    // (полоса 0..1124px при padding 40). Системный .bordered сам
-                    // даёт нативное стекло на iOS 26.
+                    // DNS-строка. iOS 26: нативная стеклянная кнопка (.glass).
+                    // Ниже — .bordered как деградация.
                     Button {
                         showDNS = true
                     } label: {
@@ -89,8 +87,7 @@ struct ContentView: View {
                                 .frame(width: 8, height: 8)
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+                    .modifier(DNSButtonStyle())
 
                     // Статус скрыт по просьбе владельца (не удалён).
                     Text(statusText)
@@ -550,5 +547,16 @@ extension Color {
             blue: Double(hex & 0xFF) / 255,
             opacity: 1
         )
+    }
+}
+
+/// DNS-кнопка: iOS 26 — нативное стекло (.glass), ниже — .bordered.
+struct DNSButtonStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.buttonStyle(.glass)
+        } else {
+            content.buttonStyle(.bordered)
+        }
     }
 }
