@@ -35,32 +35,31 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let dnsList = proto?.providerConfiguration?["dns"] as? [String]
         let dohURL = proto?.providerConfiguration?["doh"] as? String
         let dotHost = proto?.providerConfiguration?["dot"] as? String
-        let bootstrap = proto?.providerConfiguration?["bootstrap"] as? [String]
         if let dnsList, !dnsList.isEmpty {
-            var dnsSettings: NEDNSSettings
+            let bootstrap = proto?.providerConfiguration?["bootstrap"] as? [String]
             if let dohURL, !dohURL.isEmpty {
                 // Приоритет 1: DNS-over-HTTPS (порт 443, зашифровано)
                 let doh = NEDNSOverHTTPSSettings(servers: dnsList)
                 doh.serverURL = URL(string: dohURL)
-                dnsSettings = doh
+                if let bootstrap, !bootstrap.isEmpty {
+                    doh.bootstrapDNSServers = bootstrap
+                }
+                settings.dnsSettings = doh
                 NSLog("[WSBridge] DNS: DoH via %@", dohURL)
             } else if let dotHost, !dotHost.isEmpty {
                 // Приоритет 2: DNS-over-TLS (порт 853, зашифровано)
                 let dot = NEDNSOverTLSSettings(servers: dnsList)
                 dot.serverName = dotHost
-                dnsSettings = dot
+                if let bootstrap, !bootstrap.isEmpty {
+                    dot.bootstrapDNSServers = bootstrap
+                }
+                settings.dnsSettings = dot
                 NSLog("[WSBridge] DNS: DoT via %@", dotHost)
             } else {
                 // Приоритет 3: plain :53 (только свои конфиги без URL)
-                dnsSettings = NEDNSSettings(servers: dnsList)
+                settings.dnsSettings = NEDNSSettings(servers: dnsList)
                 NSLog("[WSBridge] DNS: plain %@", dnsList.joined(separator: ", "))
             }
-            // Bootstrap: DNS для резолва hostname DoH/DoT сервера
-            if let bootstrap, !bootstrap.isEmpty {
-                dnsSettings.bootstrapDNSServers = bootstrap
-                NSLog("[WSBridge] DNS: bootstrap %@", bootstrap.joined(separator: ", "))
-            }
-            settings.dnsSettings = dnsSettings
         }
 
         setTunnelNetworkSettings(settings) { [weak self] error in
