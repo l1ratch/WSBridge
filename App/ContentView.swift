@@ -107,17 +107,12 @@ struct ContentView: View {
                     }
                 }
 
-                // Версия и копирайт внизу
-                VStack(spacing: 2) {
-                    Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary.opacity(0.6))
-                    Text("© 2026 l1ratch")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary.opacity(0.45))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(.bottom, 40)
+                // Версия и копирайт — одна строка, почти над «Домой»
+                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")) · © 2026 l1ratch")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary.opacity(0.5))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 8)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -202,6 +197,22 @@ struct MenuView: View {
                         Label("О программе", systemImage: "info.circle")
                     }
                 }
+
+                Section {
+                    HStack(spacing: 24) {
+                        Link(destination: URL(string: "https://github.com/l1ratch/WSBridge-iOS")!) {
+                            Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                .font(.title2)
+                        }
+                        Link(destination: URL(string: "https://github.com/Flowseal/tg-ws-proxy")!) {
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.title2)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .foregroundStyle(.secondary)
+                }
+                .listRowBackground(Color.clear)
             }
             .navigationTitle("Меню")
             .toolbar {
@@ -343,7 +354,7 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Что это")
                         .font(.headline)
-                    Text("WSBridge — это VPN-туннель, работающий локально на вашем устройстве, который перехватывает трафик Telegram и перенаправляет его через WebSocket-соединение к серверам Telegram, минуя устаревшее оборудование Telegram. Настройка в приложении Telegram не нужна.")
+                    Text("WSBridge — VPN-туннель, работающий локально на вашем устройстве. Он перехватывает трафик Telegram и перенаправляет его через WebSocket-соединение к серверам Telegram в обход устаревшего сетевого оборудования. Настройка в самом Telegram не требуется.")
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
@@ -388,6 +399,12 @@ struct DNSView: View {
 
     var body: some View {
         Form {
+            Section {
+                Text("Изменения применятся при следующем включении туннеля.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("DNS-серверы") {
                 ForEach(tunnel.allDNS) { config in
                     Button {
@@ -418,12 +435,6 @@ struct DNSView: View {
                 } label: {
                     Label("Настройки DNS", systemImage: "gearshape")
                 }
-            }
-
-            Section {
-                Text("Изменения применятся при следующем включении туннеля.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("DNS")

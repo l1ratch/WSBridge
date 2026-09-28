@@ -136,8 +136,8 @@ final class TunnelManager: ObservableObject {
         }
     }
 
-    /// ID выбранного DNS ("system" по умолчанию).
-    @Published var selectedDNSId: String = UserDefaults.standard.string(forKey: "selectedDNSId") ?? "system" {
+    /// ID выбранного DNS ("comss" по умолчанию при первой установке).
+    @Published var selectedDNSId: String = UserDefaults.standard.string(forKey: "selectedDNSId") ?? "comss" {
         didSet { UserDefaults.standard.set(selectedDNSId, forKey: "selectedDNSId") }
     }
 
