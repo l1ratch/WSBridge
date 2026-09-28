@@ -420,17 +420,6 @@ struct DNSManageView: View {
 
     var body: some View {
         Form {
-            Section("Bootstrap DNS") {
-                Picker("Bootstrap", selection: $tunnel.bootstrapDNS) {
-                    Text("Системный").tag("system")
-                    Text("Google").tag("google")
-                    Text("Cloudflare").tag("cloudflare")
-                }
-                Text("Используется для резолва адреса DoH/DoT сервера. Cloudflare рекомендуется.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section("Пресеты") {
                 ForEach(TunnelManager.dnsPresets) { config in
                     Button {

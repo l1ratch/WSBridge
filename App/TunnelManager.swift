@@ -123,20 +123,6 @@ final class TunnelManager: ObservableObject {
                   dotHostname: "dns.malw.link", isPreset: true),
     ]
 
-    /// Bootstrap DNS: для резолва hostname DoH/DoT сервера.
-    /// "system" = DNS устройства, иначе IP.
-    @Published var bootstrapDNS: String = UserDefaults.standard.string(forKey: "bootstrapDNS") ?? "cloudflare" {
-        didSet { UserDefaults.standard.set(bootstrapDNS, forKey: "bootstrapDNS") }
-    }
-
-    var bootstrapServers: [String] {
-        switch bootstrapDNS {
-        case "google": return ["8.8.8.8", "8.8.4.4"]
-        case "cloudflare": return ["1.1.1.1", "1.0.0.1"]
-        default: return [] // system
-        }
-    }
-
     /// Свои DNS-конфиги (хранятся в UserDefaults).
     @Published var customDNS: [DNSConfig] = {
         guard let data = UserDefaults.standard.data(forKey: "customDNS"),
@@ -281,9 +267,6 @@ final class TunnelManager: ObservableObject {
                 }
                 if let dot = selectedDNS.dotHostname {
                     config["dot"] = dot as NSString
-                }
-                if !bootstrapServers.isEmpty {
-                    config["bootstrap"] = bootstrapServers as NSArray
                 }
             }
             proto.providerConfiguration = config.isEmpty ? nil : config

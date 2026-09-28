@@ -36,23 +36,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let dohURL = proto?.providerConfiguration?["doh"] as? String
         let dotHost = proto?.providerConfiguration?["dot"] as? String
         if let dnsList, !dnsList.isEmpty {
-            let bootstrap = proto?.providerConfiguration?["bootstrap"] as? [String]
             if let dohURL, !dohURL.isEmpty {
                 // Приоритет 1: DNS-over-HTTPS (порт 443, зашифровано)
                 let doh = NEDNSOverHTTPSSettings(servers: dnsList)
                 doh.serverURL = URL(string: dohURL)
-                if let bootstrap, !bootstrap.isEmpty {
-                    doh.bootstrapDNSServers = bootstrap
-                }
                 settings.dnsSettings = doh
                 NSLog("[WSBridge] DNS: DoH via %@", dohURL)
             } else if let dotHost, !dotHost.isEmpty {
                 // Приоритет 2: DNS-over-TLS (порт 853, зашифровано)
                 let dot = NEDNSOverTLSSettings(servers: dnsList)
                 dot.serverName = dotHost
-                if let bootstrap, !bootstrap.isEmpty {
-                    dot.bootstrapDNSServers = bootstrap
-                }
                 settings.dnsSettings = dot
                 NSLog("[WSBridge] DNS: DoT via %@", dotHost)
             } else {
