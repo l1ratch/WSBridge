@@ -440,6 +440,7 @@ struct DNSEditorView: View {
     @State private var name = ""
     @State private var description = ""
     @State private var servers: [String] = []
+    @State private var dohURL = ""
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -473,6 +474,15 @@ struct DNSEditorView: View {
                     Label("Добавить сервер", systemImage: "plus.circle")
                 }
             }
+            Section("DNS-over-HTTPS (рекомендуется)") {
+                TextField("https://example.com/dns-query", text: $dohURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                Text("Если указан DoH URL, DNS-запросы шифруются через HTTPS и не могут быть перехвачены провайдером.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             if config != nil {
                 Section {
                     Button("Удалить DNS", role: .destructive) {
@@ -500,17 +510,20 @@ struct DNSEditorView: View {
                 name = config.name
                 description = config.description
                 servers = config.servers
+                dohURL = config.dohURL ?? ""
             }
         }
     }
 
     private func save() {
         let cleanServers = servers.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let cleanDoh = dohURL.trimmingCharacters(in: .whitespaces)
         if let config {
             if let idx = tunnel.customDNS.firstIndex(where: { $0.id == config.id }) {
                 tunnel.customDNS[idx].name = name
                 tunnel.customDNS[idx].description = description
                 tunnel.customDNS[idx].servers = cleanServers
+                tunnel.customDNS[idx].dohURL = cleanDoh.isEmpty ? nil : cleanDoh
             }
         } else {
             let newConfig = TunnelManager.DNSConfig(
@@ -518,6 +531,7 @@ struct DNSEditorView: View {
                 name: name,
                 description: description,
                 servers: cleanServers,
+                dohURL: cleanDoh.isEmpty ? nil : cleanDoh,
                 isPreset: false
             )
             tunnel.customDNS.append(newConfig)

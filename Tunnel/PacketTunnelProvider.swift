@@ -33,12 +33,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
         let proto = protocolConfiguration as? NETunnelProviderProtocol
         let dnsList = proto?.providerConfiguration?["dns"] as? [String]
+        let dohURL = proto?.providerConfiguration?["doh"] as? String
         if let dnsList, !dnsList.isEmpty {
-            // Говорим системе "используй эти DNS". Запросы идут напрямую
-            // (вне туннеля) — DNS-IP НЕ добавляем в includedRoutes, иначе
-            // ломается вся маршрутизация (in=0).
-            settings.dnsSettings = NEDNSSettings(servers: dnsList)
-            NSLog("[WSBridge] DNS: \(dnsList.joined(separator: ", "))")
+            if let dohURL, !dohURL.isEmpty {
+                // DNS-over-HTTPS: запросы шифруются через HTTPS (порт 443),
+                // провайдер не может перехватить или заблокировать.
+                let doh = NEDNSOverHTTPSSettings(servers: dnsList)
+                doh.serverURL = URL(string: dohURL)
+                settings.dnsSettings = doh
+                NSLog("[WSBridge] DNS: DoH via %@", dohURL)
+            } else {
+                settings.dnsSettings = NEDNSSettings(servers: dnsList)
+                NSLog("[WSBridge] DNS: plain %@", dnsList.joined(separator: ", "))
+            }
         }
 
         setTunnelNetworkSettings(settings) { [weak self] error in

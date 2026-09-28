@@ -102,16 +102,19 @@ final class TunnelManager: ObservableObject {
         var name: String
         var description: String
         var servers: [String]
+        var dohURL: String?  // DNS-over-HTTPS URL (если есть — используется вместо servers)
         var isPreset: Bool
     }
 
     /// Пресеты — не удаляются, не редактируются.
+    /// DoH используется когда доступен: запросы шифруются через HTTPS (порт 443),
+    /// провайдер не может перехватить или заблокировать.
     static let dnsPresets: [DNSConfig] = [
-        DNSConfig(id: "system", name: "Системный", description: "DNS устройства (туннель не трогает DNS)", servers: [], isPreset: true),
-        DNSConfig(id: "google", name: "Google", description: "Быстрый, надёжный, без фильтрации", servers: ["8.8.8.8", "8.8.4.4"], isPreset: true),
-        DNSConfig(id: "cloudflare", name: "Cloudflare", description: "Быстрый, приватный, без фильтрации", servers: ["1.1.1.1", "1.0.0.1"], isPreset: true),
-        DNSConfig(id: "comss", name: "Comss.one", description: "Доступ к ИИ, блокировка рекламы и вредоносных сайтов", servers: ["83.220.169.155", "212.109.195.93"], isPreset: true),
-        DNSConfig(id: "malw", name: "Malw.link", description: "Блокировка вредоносных сайтов и фишинга", servers: ["95.216.204.218", "80.253.249.40"], isPreset: true),
+        DNSConfig(id: "system", name: "Системный", description: "DNS устройства (туннель не трогает DNS)", servers: [], dohURL: nil, isPreset: true),
+        DNSConfig(id: "google", name: "Google", description: "Быстрый, надёжный, без фильтрации", servers: ["8.8.8.8", "8.8.4.4"], dohURL: "https://dns.google/dns-query", isPreset: true),
+        DNSConfig(id: "cloudflare", name: "Cloudflare", description: "Быстрый, приватный, без фильтрации", servers: ["1.1.1.1", "1.0.0.1"], dohURL: "https://cloudflare-dns.com/dns-query", isPreset: true),
+        DNSConfig(id: "comss", name: "Comss.one", description: "Доступ к ИИ, блокировка рекламы и вредоносных сайтов", servers: ["83.220.169.155", "212.109.195.93"], dohURL: "https://dns.comss.one/dns-query", isPreset: true),
+        DNSConfig(id: "malw", name: "Malw.link", description: "Блокировка вредоносных сайтов и фишинга", servers: ["95.216.204.218", "80.253.249.40"], dohURL: "https://dns.malw.link/dns-query", isPreset: true),
     ]
 
     /// Свои DNS-конфиги (хранятся в UserDefaults).
@@ -251,7 +254,12 @@ final class TunnelManager: ObservableObject {
             let wd = workerDomain.trimmingCharacters(in: .whitespacesAndNewlines)
             var config: [String: NSObject] = [:]
             if !wd.isEmpty { config["worker"] = wd as NSString }
-            if !activeDNSServers.isEmpty { config["dns"] = activeDNSServers as NSArray }
+            if !activeDNSServers.isEmpty {
+                config["dns"] = activeDNSServers as NSArray
+                if let doh = selectedDNS.dohURL {
+                    config["doh"] = doh as NSString
+                }
+            }
             proto.providerConfiguration = config.isEmpty ? nil : config
             m.protocolConfiguration = proto
             try await m.saveToPreferences()
