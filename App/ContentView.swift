@@ -8,61 +8,59 @@ struct ContentView: View {
     @StateObject private var tunnel = TunnelManager()
     @State private var showMenu = false
     @State private var boltFill = false
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showDNS = false
 
     var body: some View {
         NavigationStack {
             ZStack {
-                // Точка слияния: глубокий нейтральный navy — цвет центра,
-                // куда оба свечения растворяются.
-                Color(hex: 0x0D1526).ignoresSafeArea()
+                // Точка слияния: тёмная тема — глубокий navy, светлая — мягкий серо-голубой.
+                Color(hex: colorScheme == .dark ? 0x0D1526 : 0xE8EDF5).ignoresSafeArea()
 
-                // Верхнее свечение: насыщенный цвет состояния (изумруд / синий),
-                // гауссов спад — гладкий, без полос и швов. Статично;
-                // анимация только при смене состояния (crossfade цвета).
+                // Верхнее свечение: одинаковое в обеих темах.
                 Ellipse()
                     .fill(topWashColor)
                     .frame(width: 560, height: 520)
                     .blur(radius: 110)
-                    .opacity(0.55)
+                    .opacity(colorScheme == .dark ? 0.55 : 0.45)
                     .offset(y: -250)
                     .animation(.easeInOut(duration: 0.8), value: tunnel.status)
                     .ignoresSafeArea()
 
-                // Нижняя глубина: почти чёрный синий, тоже тает к центру.
+                // Нижняя глубина: тёмная тема — почти чёрный, светлая — мягкий тёплый серый.
                 Ellipse()
-                    .fill(Color(hex: 0x040810))
+                    .fill(Color(hex: colorScheme == .dark ? 0x040810 : 0xD5DAE4))
                     .frame(width: 700, height: 480)
                     .blur(radius: 130)
-                    .opacity(0.85)
+                    .opacity(colorScheme == .dark ? 0.85 : 0.6)
                     .offset(y: 400)
                     .ignoresSafeArea()
 
-                VStack(spacing: 32) {
+                VStack(spacing: 20) {
                     // Молния — и индикатор, и кнопка: тап включает/выключает.
-                    // Анимация: цвет «заливает» молнию снизу вверх.
+                    // Анимация: цвет «заливает» молнию сверху вниз.
                     Button {
                         Task { await tunnel.toggle() }
                     } label: {
                         ZStack {
                             // База: серая молния
                             Image(systemName: "bolt.fill")
-                                .font(.system(size: 140, weight: .bold))
+                                .font(.system(size: 170, weight: .bold))
                                 .foregroundStyle(Color(.systemGray3))
 
-                            // Заливка: зелёная, растёт снизу вверх
+                            // Заливка: зелёная, растёт сверху вниз
                             Image(systemName: "bolt.fill")
-                                .font(.system(size: 140, weight: .bold))
+                                .font(.system(size: 170, weight: .bold))
                                 .foregroundStyle(Color(hex: 0x17A05E))
-                                .mask(alignment: .bottom) {
+                                .mask(alignment: .top) {
                                     Rectangle()
-                                        .frame(height: boltFill ? 200 : 0)
+                                        .frame(height: boltFill ? 240 : 0)
                                         .animation(.easeOut(duration: 0.5), value: boltFill)
                                 }
                         }
                         .shadow(color: boltFill ? Color(hex: 0x17A05E).opacity(0.6) : .black.opacity(0.2),
                                 radius: boltFill ? 40 : 8)
-                        .padding(56)
+                        .padding(48)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -74,20 +72,23 @@ struct ContentView: View {
                         boltFill = (tunnel.status == .connected)
                     }
 
-                    // DNS-строка. iOS 26: нативная стеклянная кнопка (.glass).
-                    // Ниже — .bordered как деградация.
+                    // DNS-строка: крупнее, ближе к молнии.
                     Button {
                         showDNS = true
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "network")
                             Text(dnsLabel)
+                                .font(.body)
                             Circle()
                                 .fill(tunnel.activeDNSServers.isEmpty ? Color(.systemGray3) : Color(hex: 0x17A05E))
                                 .frame(width: 8, height: 8)
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                     }
                     .modifier(DNSButtonStyle())
+                    .controlSize(.large)
 
                     // Статус скрыт по просьбе владельца (не удалён).
                     Text(statusText)
@@ -110,13 +111,13 @@ struct ContentView: View {
                 VStack(spacing: 2) {
                     Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
                         .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(.secondary.opacity(0.6))
                     Text("© 2026 l1ratch")
                         .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.25))
+                        .foregroundStyle(.secondary.opacity(0.45))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(.bottom, 12)
+                .padding(.bottom, 40)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -188,13 +189,11 @@ struct MenuView: View {
                     } label: {
                         Label("DNS-серверы", systemImage: "network")
                     }
-                    TextField("CF worker или реле ip:port", text: $tunnel.workerDomain)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .disabled(tunnel.status == .connected)
-                    Text(workerHint)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    NavigationLink {
+                        WorkerView(tunnel: tunnel)
+                    } label: {
+                        Label("CF Worker", systemImage: "cloud")
+                    }
                 }
                 Section("Информация") {
                     NavigationLink {
@@ -211,6 +210,27 @@ struct MenuView: View {
                 }
             }
         }
+    }
+}
+
+/// CF Worker: настройка собственного worker'а или реле.
+struct WorkerView: View {
+    @ObservedObject var tunnel: TunnelManager
+
+    var body: some View {
+        Form {
+            Section("CF Worker или реле") {
+                TextField("worker.example.com или ip:port", text: $tunnel.workerDomain)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .disabled(tunnel.status == .connected)
+                Text(workerHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("CF Worker")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var workerHint: String {
@@ -323,7 +343,7 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Что это")
                         .font(.headline)
-                    Text("WSBridge — это VPN-туннель, который перехватывает трафик Telegram и перенаправляет его через WebSocket-соединение к серверам Telegram, минуя сетевые блокировки. Включил туннель — Telegram работает. Выключил — обычный режим. Настройка прокси внутри Telegram не нужна.")
+                    Text("WSBridge — это VPN-туннель, работающий локально на вашем устройстве, который перехватывает трафик Telegram и перенаправляет его через WebSocket-соединение к серверам Telegram, минуя устаревшее оборудование Telegram. Настройка в приложении Telegram не нужна.")
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
@@ -408,6 +428,11 @@ struct DNSView: View {
         }
         .navigationTitle("DNS")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Готово") { dismiss() }
+            }
+        }
     }
 }
 

@@ -116,9 +116,9 @@ final class TunnelManager: ObservableObject {
                   servers: ["8.8.8.8", "8.8.4.4"], dohURL: "https://dns.google/dns-query", dotHostname: nil, isPreset: true),
         DNSConfig(id: "cloudflare", name: "Cloudflare", description: "Быстрый, приватный, без фильтрации",
                   servers: ["1.1.1.1", "1.0.0.1"], dohURL: "https://cloudflare-dns.com/dns-query", dotHostname: nil, isPreset: true),
-        DNSConfig(id: "comss", name: "Comss.one", description: "Доступ к ИИ, блокировка рекламы и вредоносных сайтов",
+        DNSConfig(id: "comss", name: "Comss.one", description: "Доступ к ИИ, блокировка рекламы, счетчиков, вредоносных сайтов и фишинга",
                   servers: ["83.220.169.155", "212.109.195.93"], dohURL: "https://dns.comss.one/dns-query", dotHostname: nil, isPreset: true),
-        DNSConfig(id: "malw", name: "Malw.link", description: "Блокировка вредоносных сайтов и фишинга",
+        DNSConfig(id: "malw", name: "Malw.link", description: "Разблокирует недоступные сайты, блокирует мусор.",
                   servers: ["95.216.204.218", "80.253.249.40"], dohURL: "https://dns.malw.link/dns-query",
                   dotHostname: "dns.malw.link", isPreset: true),
     ]
