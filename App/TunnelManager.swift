@@ -94,6 +94,10 @@ final class TunnelManager: ObservableObject {
     @Published var workerDomain: String = UserDefaults.standard.string(forKey: "workerDomain") ?? "" {
         didSet { UserDefaults.standard.set(workerDomain, forKey: "workerDomain") }
     }
+    /// DNS-серверы для туннеля. Пустой = системные (туннель не трогает DNS).
+    @Published var dnsServers: [String] = UserDefaults.standard.stringArray(forKey: "dnsServers") ?? [] {
+        didSet { UserDefaults.standard.set(dnsServers, forKey: "dnsServers") }
+    }
 
     private var manager: NETunnelProviderManager?
     private var darwinObserver: CFRunLoopObserver?
@@ -201,7 +205,10 @@ final class TunnelManager: ObservableObject {
             proto.providerBundleIdentifier = Self.providerBundleId
             proto.serverAddress = "WSBridge"
             let wd = workerDomain.trimmingCharacters(in: .whitespacesAndNewlines)
-            proto.providerConfiguration = wd.isEmpty ? nil : ["worker": wd as NSString]
+            var config: [String: NSObject] = [:]
+            if !wd.isEmpty { config["worker"] = wd as NSString }
+            if !dnsServers.isEmpty { config["dns"] = dnsServers as NSArray }
+            proto.providerConfiguration = config.isEmpty ? nil : config
             m.protocolConfiguration = proto
             try await m.saveToPreferences()
             try await m.loadFromPreferences()

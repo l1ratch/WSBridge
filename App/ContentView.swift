@@ -37,7 +37,7 @@ struct ContentView: View {
                     .offset(y: 400)
                     .ignoresSafeArea()
 
-                VStack(spacing: 48) {
+                VStack(spacing: 32) {
                     // Молния — и индикатор, и кнопка: тап включает/выключает.
                     // Анимация: цвет «заливает» молнию снизу вверх.
                     Button {
@@ -72,6 +72,29 @@ struct ContentView: View {
                     .onAppear {
                         boltFill = (tunnel.status == .connected)
                     }
+
+                    // DNS-бар: стеклянная строка с текущим DNS и статусом
+                    NavigationLink {
+                        DNSView(tunnel: tunnel)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "network")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text(dnsLabel)
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Circle()
+                                .fill(tunnel.dnsServers.isEmpty ? Color(.systemGray3) : Color(hex: 0x17A05E))
+                                .frame(width: 8, height: 8)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .glassCapsule()
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 40)
 
                     // Статус скрыт по просьбе владельца (не удалён).
                     Text(statusText)
@@ -134,6 +157,17 @@ struct ContentView: View {
     private var topWashColor: Color {
         tunnel.status == .connected ? Color(hex: 0x17A05E) : Color(hex: 0x1E3A6E)
     }
+
+    /// Подпись DNS-бара: название пресета или «Свой».
+    private var dnsLabel: String {
+        let s = tunnel.dnsServers
+        if s.isEmpty { return "Системный" }
+        if s == ["8.8.8.8", "8.8.4.4"] { return "Google" }
+        if s == ["1.1.1.1", "1.0.0.1"] { return "Cloudflare" }
+        if s == ["83.220.169.155", "212.109.195.93"] { return "Comss.one" }
+        if s == ["95.216.204.218", "80.253.249.40"] { return "Malw.link" }
+        return "Свой"
+    }
 }
 
 /// Меню: штатный Form. На iOS 26 система сама рисует Liquid Glass.
@@ -157,6 +191,11 @@ struct MenuView: View {
                     }
                 }
                 Section("Настройки") {
+                    NavigationLink {
+                        DNSView(tunnel: tunnel)
+                    } label: {
+                        Label("DNS-серверы", systemImage: "network")
+                    }
                     TextField("CF worker или реле ip:port", text: $tunnel.workerDomain)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -327,6 +366,90 @@ struct AboutView: View {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         return "\(v) (\(b))"
+    }
+}
+
+/// Выбор DNS-серверов: пресеты + свои.
+struct DNSView: View {
+    @ObservedObject var tunnel: TunnelManager
+
+    private struct Preset: Identifiable {
+        let id = UUID()
+        let name: String
+        let description: String
+        let servers: [String]
+    }
+
+    private let presets: [Preset] = [
+        Preset(name: "Системный", description: "DNS устройства (туннель не трогает DNS)", servers: []),
+        Preset(name: "Google", description: "Быстрый, надёжный, без фильтрации", servers: ["8.8.8.8", "8.8.4.4"]),
+        Preset(name: "Cloudflare", description: "Быстрый, приватный, без фильтрации", servers: ["1.1.1.1", "1.0.0.1"]),
+        Preset(name: "Comss.one", description: "Доступ к ИИ, блокировка рекламы и вредоносных сайтов", servers: ["83.220.169.155", "212.109.195.93"]),
+        Preset(name: "Malw.link", description: "Блокировка вредоносных сайтов и фишинга", servers: ["95.216.204.218", "80.253.249.40"]),
+    ]
+
+    var body: some View {
+        Form {
+            Section("Пресеты") {
+                ForEach(presets) { preset in
+                    Button {
+                        tunnel.dnsServers = preset.servers
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(preset.name)
+                                    .foregroundStyle(.primary)
+                                Text(preset.description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if tunnel.dnsServers == preset.servers {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Section("Свои серверы") {
+                ForEach(tunnel.dnsServers.indices, id: \.self) { i in
+                    HStack {
+                        TextField("IP-адрес", text: Binding(
+                            get: { tunnel.dnsServers[i] },
+                            set: { tunnel.dnsServers[i] = $0 }
+                        ))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.numbersAndPunctuation)
+                        Button {
+                            tunnel.dnsServers.remove(at: i)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Button {
+                    tunnel.dnsServers.append("")
+                } label: {
+                    Label("Добавить", systemImage: "plus.circle")
+                }
+            }
+
+            if !tunnel.dnsServers.isEmpty {
+                Section {
+                    Text("Изменения применятся при следующем включении туннеля.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("DNS")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
