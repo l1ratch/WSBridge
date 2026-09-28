@@ -94,10 +94,54 @@ final class TunnelManager: ObservableObject {
     @Published var workerDomain: String = UserDefaults.standard.string(forKey: "workerDomain") ?? "" {
         didSet { UserDefaults.standard.set(workerDomain, forKey: "workerDomain") }
     }
-    /// DNS-серверы для туннеля. Пустой = системные (туннель не трогает DNS).
-    @Published var dnsServers: [String] = UserDefaults.standard.stringArray(forKey: "dnsServers") ?? [] {
-        didSet { UserDefaults.standard.set(dnsServers, forKey: "dnsServers") }
+
+    // MARK: - DNS
+
+    struct DNSConfig: Codable, Identifiable, Equatable {
+        var id: String
+        var name: String
+        var description: String
+        var servers: [String]
+        var isPreset: Bool
     }
+
+    /// Пресеты — не удаляются, не редактируются.
+    static let dnsPresets: [DNSConfig] = [
+        DNSConfig(id: "system", name: "Системный", description: "DNS устройства (туннель не трогает DNS)", servers: [], isPreset: true),
+        DNSConfig(id: "google", name: "Google", description: "Быстрый, надёжный, без фильтрации", servers: ["8.8.8.8", "8.8.4.4"], isPreset: true),
+        DNSConfig(id: "cloudflare", name: "Cloudflare", description: "Быстрый, приватный, без фильтрации", servers: ["1.1.1.1", "1.0.0.1"], isPreset: true),
+        DNSConfig(id: "comss", name: "Comss.one", description: "Доступ к ИИ, блокировка рекламы и вредоносных сайтов", servers: ["83.220.169.155", "212.109.195.93"], isPreset: true),
+        DNSConfig(id: "malw", name: "Malw.link", description: "Блокировка вредоносных сайтов и фишинга", servers: ["95.216.204.218", "80.253.249.40"], isPreset: true),
+    ]
+
+    /// Свои DNS-конфиги (хранятся в UserDefaults).
+    @Published var customDNS: [DNSConfig] = {
+        guard let data = UserDefaults.standard.data(forKey: "customDNS"),
+              let configs = try? JSONDecoder().decode([DNSConfig].self, from: data) else { return [] }
+        return configs
+    }() {
+        didSet {
+            if let data = try? JSONEncoder().encode(customDNS) {
+                UserDefaults.standard.set(data, forKey: "customDNS")
+            }
+        }
+    }
+
+    /// ID выбранного DNS ("system" по умолчанию).
+    @Published var selectedDNSId: String = UserDefaults.standard.string(forKey: "selectedDNSId") ?? "system" {
+        didSet { UserDefaults.standard.set(selectedDNSId, forKey: "selectedDNSId") }
+    }
+
+    /// Все DNS: пресеты + свои.
+    var allDNS: [DNSConfig] { Self.dnsPresets + customDNS }
+
+    /// Выбранный DNS-конфиг.
+    var selectedDNS: DNSConfig {
+        allDNS.first { $0.id == selectedDNSId } ?? Self.dnsPresets[0]
+    }
+
+    /// IP-адреса для туннеля (пусто = системный).
+    var activeDNSServers: [String] { selectedDNS.servers }
 
     private var manager: NETunnelProviderManager?
     private var darwinObserver: CFRunLoopObserver?
@@ -207,7 +251,7 @@ final class TunnelManager: ObservableObject {
             let wd = workerDomain.trimmingCharacters(in: .whitespacesAndNewlines)
             var config: [String: NSObject] = [:]
             if !wd.isEmpty { config["worker"] = wd as NSString }
-            if !dnsServers.isEmpty { config["dns"] = dnsServers as NSArray }
+            if !activeDNSServers.isEmpty { config["dns"] = activeDNSServers as NSArray }
             proto.providerConfiguration = config.isEmpty ? nil : config
             m.protocolConfiguration = proto
             try await m.saveToPreferences()

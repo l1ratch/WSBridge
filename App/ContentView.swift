@@ -8,6 +8,7 @@ struct ContentView: View {
     @StateObject private var tunnel = TunnelManager()
     @State private var showMenu = false
     @State private var boltFill = false
+    @State private var showDNS = false
 
     var body: some View {
         NavigationStack {
@@ -73,9 +74,9 @@ struct ContentView: View {
                         boltFill = (tunnel.status == .connected)
                     }
 
-                    // DNS-бар: стеклянная строка с текущим DNS и статусом
-                    NavigationLink {
-                        DNSView(tunnel: tunnel)
+                    // DNS-бар: нативная кнопка, открывает sheet
+                    Button {
+                        showDNS = true
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "network")
@@ -83,7 +84,6 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                             Text(dnsLabel)
                                 .font(.subheadline)
-                                .foregroundStyle(.primary)
                             Spacer()
                             Circle()
                                 .fill(tunnel.dnsServers.isEmpty ? Color(.systemGray3) : Color(hex: 0x17A05E))
@@ -139,6 +139,11 @@ struct ContentView: View {
             .sheet(isPresented: $showMenu) {
                 MenuView(tunnel: tunnel)
             }
+            .sheet(isPresented: $showDNS) {
+                NavigationStack {
+                    DNSView(tunnel: tunnel)
+                }
+            }
             .task { await tunnel.reload() }
         }
     }
@@ -158,15 +163,9 @@ struct ContentView: View {
         tunnel.status == .connected ? Color(hex: 0x17A05E) : Color(hex: 0x1E3A6E)
     }
 
-    /// Подпись DNS-бара: название пресета или «Свой».
+    /// Подпись DNS-бара: название выбранного DNS.
     private var dnsLabel: String {
-        let s = tunnel.dnsServers
-        if s.isEmpty { return "Системный" }
-        if s == ["8.8.8.8", "8.8.4.4"] { return "Google" }
-        if s == ["1.1.1.1", "1.0.0.1"] { return "Cloudflare" }
-        if s == ["83.220.169.155", "212.109.195.93"] { return "Comss.one" }
-        if s == ["95.216.204.218", "80.253.249.40"] { return "Malw.link" }
-        return "Свой"
+        tunnel.selectedDNS.name
     }
 }
 
@@ -369,44 +368,41 @@ struct AboutView: View {
     }
 }
 
-/// Выбор DNS-серверов: пресеты + свои.
+/// Выбор DNS-серверов: список пресетов + свои, с деталями каждого.
 struct DNSView: View {
     @ObservedObject var tunnel: TunnelManager
-
-    private struct Preset: Identifiable {
-        let id = UUID()
-        let name: String
-        let description: String
-        let servers: [String]
-    }
-
-    private let presets: [Preset] = [
-        Preset(name: "Системный", description: "DNS устройства (туннель не трогает DNS)", servers: []),
-        Preset(name: "Google", description: "Быстрый, надёжный, без фильтрации", servers: ["8.8.8.8", "8.8.4.4"]),
-        Preset(name: "Cloudflare", description: "Быстрый, приватный, без фильтрации", servers: ["1.1.1.1", "1.0.0.1"]),
-        Preset(name: "Comss.one", description: "Доступ к ИИ, блокировка рекламы и вредоносных сайтов", servers: ["83.220.169.155", "212.109.195.93"]),
-        Preset(name: "Malw.link", description: "Блокировка вредоносных сайтов и фишинга", servers: ["95.216.204.218", "80.253.249.40"]),
-    ]
+    @State private var showAdd = false
+    @State private var editConfig: TunnelManager.DNSConfig?
 
     var body: some View {
         Form {
-            Section("Пресеты") {
-                ForEach(presets) { preset in
+            Section("DNS-серверы") {
+                ForEach(tunnel.allDNS) { config in
                     Button {
-                        tunnel.dnsServers = preset.servers
+                        tunnel.selectedDNSId = config.id
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(preset.name)
+                                Text(config.name)
                                     .foregroundStyle(.primary)
-                                Text(preset.description)
+                                Text(config.description)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            if tunnel.dnsServers == preset.servers {
+                            if tunnel.selectedDNSId == config.id {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
+                            }
+                            if !config.isPreset {
+                                Button {
+                                    editConfig = config
+                                } label: {
+                                    Image(systemName: "chevron.right")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -414,18 +410,63 @@ struct DNSView: View {
                 }
             }
 
-            Section("Свои серверы") {
-                ForEach(tunnel.dnsServers.indices, id: \.self) { i in
+            Section {
+                Button {
+                    showAdd = true
+                } label: {
+                    Label("Добавить DNS", systemImage: "plus.circle")
+                }
+            }
+
+            Section {
+                Text("Изменения применятся при следующем включении туннеля.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("DNS")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showAdd) {
+            NavigationStack {
+                DNSEditorView(tunnel: tunnel, config: nil)
+            }
+        }
+        .sheet(item: $editConfig) { config in
+            NavigationStack {
+                DNSEditorView(tunnel: tunnel, config: config)
+            }
+        }
+    }
+}
+
+/// Конструктор / редактор DNS-конфига.
+struct DNSEditorView: View {
+    @ObservedObject var tunnel: TunnelManager
+    let config: TunnelManager.DNSConfig?
+
+    @State private var name = ""
+    @State private var description = ""
+    @State private var servers: [String] = []
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Form {
+            Section("Название") {
+                TextField("Например: Мой DNS", text: $name)
+                TextField("Описание (необязательно)", text: $description)
+            }
+            Section("Серверы") {
+                ForEach(servers.indices, id: \.self) { i in
                     HStack {
                         TextField("IP-адрес", text: Binding(
-                            get: { tunnel.dnsServers[i] },
-                            set: { tunnel.dnsServers[i] = $0 }
+                            get: { servers[i] },
+                            set: { servers[i] = $0 }
                         ))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.numbersAndPunctuation)
                         Button {
-                            tunnel.dnsServers.remove(at: i)
+                            servers.remove(at: i)
                         } label: {
                             Image(systemName: "minus.circle.fill")
                                 .foregroundStyle(.red)
@@ -434,22 +475,62 @@ struct DNSView: View {
                     }
                 }
                 Button {
-                    tunnel.dnsServers.append("")
+                    servers.append("")
                 } label: {
-                    Label("Добавить", systemImage: "plus.circle")
+                    Label("Добавить сервер", systemImage: "plus.circle")
                 }
             }
-
-            if !tunnel.dnsServers.isEmpty {
+            if config != nil {
                 Section {
-                    Text("Изменения применятся при следующем включении туннеля.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Button("Удалить DNS", role: .destructive) {
+                        tunnel.customDNS.removeAll { $0.id == config?.id }
+                        if tunnel.selectedDNSId == config?.id {
+                            tunnel.selectedDNSId = "system"
+                        }
+                        dismiss()
+                    }
                 }
             }
         }
-        .navigationTitle("DNS")
+        .navigationTitle(config == nil ? "Новый DNS" : "Настройки DNS")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Сохранить") {
+                    save()
+                }
+                .disabled(name.isEmpty || servers.allSatisfy { $0.isEmpty })
+            }
+        }
+        .onAppear {
+            if let config {
+                name = config.name
+                description = config.description
+                servers = config.servers
+            }
+        }
+    }
+
+    private func save() {
+        let cleanServers = servers.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        if let config {
+            if let idx = tunnel.customDNS.firstIndex(where: { $0.id == config.id }) {
+                tunnel.customDNS[idx].name = name
+                tunnel.customDNS[idx].description = description
+                tunnel.customDNS[idx].servers = cleanServers
+            }
+        } else {
+            let newConfig = TunnelManager.DNSConfig(
+                id: UUID().uuidString,
+                name: name,
+                description: description,
+                servers: cleanServers,
+                isPreset: false
+            )
+            tunnel.customDNS.append(newConfig)
+            tunnel.selectedDNSId = newConfig.id
+        }
+        dismiss()
     }
 }
 
