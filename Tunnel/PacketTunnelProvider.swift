@@ -31,7 +31,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // был чёрной дырой — Telegram ломился в v6 DC и висел до таймаута.
         settings.mtu = 1500
 
-        let proto = self?.protocolConfiguration as? NETunnelProviderProtocol
+        let proto = protocolConfiguration as? NETunnelProviderProtocol
         let dnsList = proto?.providerConfiguration?["dns"] as? [String]
         if let dnsList, !dnsList.isEmpty {
             settings.dnsSettings = NEDNSSettings(servers: dnsList)
