@@ -184,7 +184,7 @@ struct MenuView: View {
                 }
                 Section("Настройки") {
                     NavigationLink {
-                        DNSView(tunnel: tunnel)
+                        DNSManageView(tunnel: tunnel)
                     } label: {
                         Label("DNS-серверы", systemImage: "network")
                     }
@@ -361,11 +361,10 @@ struct AboutView: View {
     }
 }
 
-/// Выбор DNS-серверов: список пресетов + свои, с деталями каждого.
+/// Выбор DNS: только выбор + кнопка «Настройки DNS» внизу.
 struct DNSView: View {
     @ObservedObject var tunnel: TunnelManager
-    @State private var showAdd = false
-    @State private var editConfig: TunnelManager.DNSConfig?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Form {
@@ -387,16 +386,6 @@ struct DNSView: View {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
                             }
-                            if !config.isPreset {
-                                Button {
-                                    editConfig = config
-                                } label: {
-                                    Image(systemName: "chevron.right")
-                                        .font(.footnote.weight(.semibold))
-                                        .foregroundStyle(.tertiary)
-                                }
-                                .buttonStyle(.plain)
-                            }
                         }
                     }
                     .buttonStyle(.plain)
@@ -404,10 +393,10 @@ struct DNSView: View {
             }
 
             Section {
-                Button {
-                    showAdd = true
+                NavigationLink {
+                    DNSManageView(tunnel: tunnel)
                 } label: {
-                    Label("Добавить DNS", systemImage: "plus.circle")
+                    Label("Настройки DNS", systemImage: "gearshape")
                 }
             }
 
@@ -419,6 +408,82 @@ struct DNSView: View {
         }
         .navigationTitle("DNS")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Управление DNS: просмотр, добавление, редактирование, удаление.
+struct DNSManageView: View {
+    @ObservedObject var tunnel: TunnelManager
+    @State private var showAdd = false
+    @State private var editConfig: TunnelManager.DNSConfig?
+    @State private var viewConfig: TunnelManager.DNSConfig?
+
+    var body: some View {
+        Form {
+            Section("Bootstrap DNS") {
+                Picker("Bootstrap", selection: $tunnel.bootstrapDNS) {
+                    Text("Системный").tag("system")
+                    Text("Google").tag("google")
+                    Text("Cloudflare").tag("cloudflare")
+                }
+                Text("Используется для резолва адреса DoH/DoT сервера. Cloudflare рекомендуется.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Пресеты") {
+                ForEach(TunnelManager.dnsPresets) { config in
+                    Button {
+                        viewConfig = config
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(config.name)
+                                    .foregroundStyle(.primary)
+                                Text(config.description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Section("Свои серверы") {
+                ForEach(tunnel.customDNS) { config in
+                    Button {
+                        editConfig = config
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(config.name)
+                                    .foregroundStyle(.primary)
+                                Text(config.description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button {
+                    showAdd = true
+                } label: {
+                    Label("Добавить DNS", systemImage: "plus.circle")
+                }
+            }
+        }
+        .navigationTitle("Настройки DNS")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showAdd) {
             NavigationStack {
                 DNSEditorView(tunnel: tunnel, config: nil)
@@ -429,10 +494,61 @@ struct DNSView: View {
                 DNSEditorView(tunnel: tunnel, config: config)
             }
         }
+        .sheet(item: $viewConfig) { config in
+            NavigationStack {
+                DNSDetailView(config: config)
+            }
+        }
     }
 }
 
-/// Конструктор / редактор DNS-конфига.
+/// Просмотр DNS-конфига (только чтение).
+struct DNSDetailView: View {
+    let config: TunnelManager.DNSConfig
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Form {
+            Section("Информация") {
+                LabeledContent("Название", value: config.name)
+                if !config.description.isEmpty {
+                    LabeledContent("Описание", value: config.description)
+                }
+            }
+            if !config.servers.isEmpty {
+                Section("Серверы") {
+                    ForEach(config.servers, id: \.self) { ip in
+                        Text(ip)
+                            .font(.system(.body, design: .monospaced))
+                    }
+                }
+            }
+            if let doh = config.dohURL {
+                Section("DNS-over-HTTPS") {
+                    Text(doh)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+            }
+            if let dot = config.dotHostname {
+                Section("DNS-over-TLS") {
+                    Text(dot)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .navigationTitle(config.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Готово") { dismiss() }
+            }
+        }
+    }
+}
+
+/// Конструктор / редактор DNS-конфига (только свои).
 struct DNSEditorView: View {
     @ObservedObject var tunnel: TunnelManager
     let config: TunnelManager.DNSConfig?
@@ -441,6 +557,8 @@ struct DNSEditorView: View {
     @State private var description = ""
     @State private var servers: [String] = []
     @State private var dohURL = ""
+    @State private var dotHostname = ""
+    @State private var showPlainWarning = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -449,7 +567,7 @@ struct DNSEditorView: View {
                 TextField("Например: Мой DNS", text: $name)
                 TextField("Описание (необязательно)", text: $description)
             }
-            Section("Серверы") {
+            Section("Серверы (IP)") {
                 ForEach(servers.indices, id: \.self) { i in
                     HStack {
                         TextField("IP-адрес", text: Binding(
@@ -479,9 +597,24 @@ struct DNSEditorView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
-                Text("Если указан DoH URL, DNS-запросы шифруются через HTTPS и не могут быть перехвачены провайдером.")
+                Text("Запросы шифруются через HTTPS (порт 443). Провайдер не может перехватить.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            Section("DNS-over-TLS") {
+                TextField("dns.example.com", text: $dotHostname)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Text("Используется если DoH URL не указан. Запросы шифруются через TLS (порт 853).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if dohURL.trimmingCharacters(in: .whitespaces).isEmpty && dotHostname.trimmingCharacters(in: .whitespaces).isEmpty {
+                Section {
+                    Label("Без DoH/DoT запросы идут по обычному DNS (порт 53) и могут блокироваться или перехватываться провайдером.", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
             if config != nil {
                 Section {
@@ -511,6 +644,7 @@ struct DNSEditorView: View {
                 description = config.description
                 servers = config.servers
                 dohURL = config.dohURL ?? ""
+                dotHostname = config.dotHostname ?? ""
             }
         }
     }
@@ -518,12 +652,14 @@ struct DNSEditorView: View {
     private func save() {
         let cleanServers = servers.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         let cleanDoh = dohURL.trimmingCharacters(in: .whitespaces)
+        let cleanDot = dotHostname.trimmingCharacters(in: .whitespaces)
         if let config {
             if let idx = tunnel.customDNS.firstIndex(where: { $0.id == config.id }) {
                 tunnel.customDNS[idx].name = name
                 tunnel.customDNS[idx].description = description
                 tunnel.customDNS[idx].servers = cleanServers
                 tunnel.customDNS[idx].dohURL = cleanDoh.isEmpty ? nil : cleanDoh
+                tunnel.customDNS[idx].dotHostname = cleanDot.isEmpty ? nil : cleanDot
             }
         } else {
             let newConfig = TunnelManager.DNSConfig(
@@ -532,6 +668,7 @@ struct DNSEditorView: View {
                 description: description,
                 servers: cleanServers,
                 dohURL: cleanDoh.isEmpty ? nil : cleanDoh,
+                dotHostname: cleanDot.isEmpty ? nil : cleanDot,
                 isPreset: false
             )
             tunnel.customDNS.append(newConfig)

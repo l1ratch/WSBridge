@@ -101,21 +101,41 @@ final class TunnelManager: ObservableObject {
         var id: String
         var name: String
         var description: String
-        var servers: [String]
-        var dohURL: String?  // DNS-over-HTTPS URL (если есть — используется вместо servers)
+        var servers: [String]       // IP-адреса (bootstrap + plain fallback)
+        var dohURL: String?         // DNS-over-HTTPS URL (приоритет 1)
+        var dotHostname: String?    // DNS-over-TLS hostname (приоритет 2)
         var isPreset: Bool
     }
 
     /// Пресеты — не удаляются, не редактируются.
-    /// DoH используется когда доступен: запросы шифруются через HTTPS (порт 443),
-    /// провайдер не может перехватить или заблокировать.
+    /// Приоритет: DoH > DoT > plain :53 (только для своих без URL).
     static let dnsPresets: [DNSConfig] = [
-        DNSConfig(id: "system", name: "Системный", description: "DNS устройства (туннель не трогает DNS)", servers: [], dohURL: nil, isPreset: true),
-        DNSConfig(id: "google", name: "Google", description: "Быстрый, надёжный, без фильтрации", servers: ["8.8.8.8", "8.8.4.4"], dohURL: "https://dns.google/dns-query", isPreset: true),
-        DNSConfig(id: "cloudflare", name: "Cloudflare", description: "Быстрый, приватный, без фильтрации", servers: ["1.1.1.1", "1.0.0.1"], dohURL: "https://cloudflare-dns.com/dns-query", isPreset: true),
-        DNSConfig(id: "comss", name: "Comss.one", description: "Доступ к ИИ, блокировка рекламы и вредоносных сайтов", servers: ["83.220.169.155", "212.109.195.93"], dohURL: "https://dns.comss.one/dns-query", isPreset: true),
-        DNSConfig(id: "malw", name: "Malw.link", description: "Блокировка вредоносных сайтов и фишинга", servers: ["95.216.204.218", "80.253.249.40"], dohURL: "https://dns.malw.link/dns-query", isPreset: true),
+        DNSConfig(id: "system", name: "Системный", description: "DNS устройства (туннель не трогает DNS)",
+                  servers: [], dohURL: nil, dotHostname: nil, isPreset: true),
+        DNSConfig(id: "google", name: "Google", description: "Быстрый, надёжный, без фильтрации",
+                  servers: ["8.8.8.8", "8.8.4.4"], dohURL: "https://dns.google/dns-query", dotHostname: nil, isPreset: true),
+        DNSConfig(id: "cloudflare", name: "Cloudflare", description: "Быстрый, приватный, без фильтрации",
+                  servers: ["1.1.1.1", "1.0.0.1"], dohURL: "https://cloudflare-dns.com/dns-query", dotHostname: nil, isPreset: true),
+        DNSConfig(id: "comss", name: "Comss.one", description: "Доступ к ИИ, блокировка рекламы и вредоносных сайтов",
+                  servers: ["83.220.169.155", "212.109.195.93"], dohURL: "https://dns.comss.one/dns-query", dotHostname: nil, isPreset: true),
+        DNSConfig(id: "malw", name: "Malw.link", description: "Блокировка вредоносных сайтов и фишинга",
+                  servers: ["95.216.204.218", "80.253.249.40"], dohURL: "https://dns.malw.link/dns-query",
+                  dotHostname: "dns.malw.link", isPreset: true),
     ]
+
+    /// Bootstrap DNS: для резолва hostname DoH/DoT сервера.
+    /// "system" = DNS устройства, иначе IP.
+    @Published var bootstrapDNS: String = UserDefaults.standard.string(forKey: "bootstrapDNS") ?? "cloudflare" {
+        didSet { UserDefaults.standard.set(bootstrapDNS, forKey: "bootstrapDNS") }
+    }
+
+    var bootstrapServers: [String] {
+        switch bootstrapDNS {
+        case "google": return ["8.8.8.8", "8.8.4.4"]
+        case "cloudflare": return ["1.1.1.1", "1.0.0.1"]
+        default: return [] // system
+        }
+    }
 
     /// Свои DNS-конфиги (хранятся в UserDefaults).
     @Published var customDNS: [DNSConfig] = {
@@ -258,6 +278,12 @@ final class TunnelManager: ObservableObject {
                 config["dns"] = activeDNSServers as NSArray
                 if let doh = selectedDNS.dohURL {
                     config["doh"] = doh as NSString
+                }
+                if let dot = selectedDNS.dotHostname {
+                    config["dot"] = dot as NSString
+                }
+                if !bootstrapServers.isEmpty {
+                    config["bootstrap"] = bootstrapServers as NSArray
                 }
             }
             proto.providerConfiguration = config.isEmpty ? nil : config
