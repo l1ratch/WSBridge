@@ -27,7 +27,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     ) {
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "198.18.0.1")
         let ipv4 = NEIPv4Settings(addresses: ["198.18.0.2"], subnetMasks: ["255.255.255.255"])
-        ipv4.includedRoutes = TelegramDCs.includedRoutes
+        var routes = TelegramDCs.includedRoutes
         settings.ipv4Settings = ipv4
         // IPv6 НЕ анонсируем: lwIP у нас v4-only, анонсированный v6-маршрут
         // был чёрной дырой — Telegram ломился в v6 DC и висел до таймаута.
@@ -37,11 +37,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let dnsList = proto?.providerConfiguration?["dns"] as? [String]
         if let dnsList, !dnsList.isEmpty {
             settings.dnsSettings = NEDNSSettings(servers: dnsList)
-            NSLog("[WSBridge] DNS: \(dnsList.joined(separator: ", "))")
+            // DNS-серверы должны идти через туннель, иначе запросы блокируются.
+            for dnsIP in dnsList {
+                routes.append(NEIPv4Route(destinationAddress: dnsIP, subnetMask: "255.255.255.255"))
+            }
+            NSLog("[WSBridge] DNS: \(dnsList.joined(separator: ", ")) (routed via tunnel)")
             dnsForwarder = DNSForwarder(dnsServers: dnsList) { [weak self] data in
                 self?.writePacket(data)
             }
         }
+        ipv4.includedRoutes = routes
 
         setTunnelNetworkSettings(settings) { [weak self] error in
             if let error {
