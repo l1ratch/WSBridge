@@ -86,7 +86,7 @@ struct ContentView: View {
                                 .font(.subheadline)
                             Spacer()
                             Circle()
-                                .fill(tunnel.dnsServers.isEmpty ? Color(.systemGray3) : Color(hex: 0x17A05E))
+                                .fill(tunnel.activeDNSServers.isEmpty ? Color(.systemGray3) : Color(hex: 0x17A05E))
                                 .frame(width: 8, height: 8)
                         }
                         .padding(.horizontal, 16)
