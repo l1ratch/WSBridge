@@ -44,11 +44,22 @@ enum CFDomains {
     }
 
     /// Заменяет список фронтов (вызывается из PacketTunnelProvider.startTunnel).
-    /// Битовый/пустой список игнорируется — остаётся встроенный.
+    /// НЕ заменяет, а ОБЪЕДИНЯЕТ со встроенным: новые домены апстрима часто
+    /// не резолвятся в DNS сразу после публикации (A-записей нет) — полная
+    /// замена убивала живые встроенные фронты. Чередуем новый и старый
+    /// списки вперемешку — каскад сам выберет живых.
+    /// Битовый/короткий список игнорируется.
     static func update(_ newBases: [String]) {
         lock.lock(); defer { lock.unlock() }
         guard newBases.count >= 3 else { return }
-        _bases = newBases
+        let old = _bases ?? builtinBases
+        var merged: [String] = []
+        let maxCount = max(newBases.count, old.count)
+        for i in 0..<maxCount {
+            if i < newBases.count { merged.append(newBases[i]) }
+            if i < old.count { merged.append(old[i]) }
+        }
+        _bases = Array(NSOrderedSet(array: merged) as! [String])
     }
 
     /// Возвращает список доменов для WS-подключения: kws{dc}.{base}
