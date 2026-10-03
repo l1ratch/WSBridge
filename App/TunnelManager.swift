@@ -152,6 +152,67 @@ final class TunnelManager: ObservableObject {
     /// IP-адреса для туннеля (пусто = системный).
     var activeDNSServers: [String] { selectedDNS.servers }
 
+    // MARK: - Фронты (hot-обновление без пересборки)
+
+    /// Актуальный список фронтов (базовые домены, без kws{dc}. префикса).
+    /// Пусто = встроенный из CFDomains. Хранится в UserDefaults.
+    @Published private(set) var frontBases: [String] = {
+        guard let saved = UserDefaults.standard.stringArray(forKey: "frontBases"),
+              !saved.isEmpty else { return [] }
+        return saved
+    }() {
+        didSet { UserDefaults.standard.set(frontBases, forKey: "frontBases") }
+    }
+
+    /// Дата последнего успешного обновления списка фронтов.
+    @Published private(set) var frontsUpdatedAt: Date? {
+        didSet { UserDefaults.standard.set(frontsUpdatedAt, forKey: "frontsUpdatedAt") }
+    }
+
+    /// Статус последнего обновления (для UI).
+    @Published var frontsUpdateMessage: String?
+
+    /// URL списка фронтов. Апстрим + два зеркала jsDelivr (GitHub в РФ плавает).
+    private static let frontListURLs = [
+        "https://raw.githubusercontent.com/Flowseal/tg-ws-proxy/master/.github/cfproxy-domains.txt",
+        "https://cdn.jsdelivr.net/gh/Flowseal/tg-ws-proxy@master/.github/cfproxy-domains.txt",
+        "https://fastly.jsdelivr.net/gh/Flowseal/tg-ws-proxy@master/.github/cfproxy-domains.txt",
+    ]
+
+    /// Скачивает свежий список фронтов (все URL по очереди).
+    /// Возвращает (кол-во доменов, дата) или кладёт ошибку в frontsUpdateMessage.
+    @discardableResult
+    func updateFronts() async -> Bool {
+        frontsUpdateMessage = "Обновление…"
+        for urlString in Self.frontListURLs {
+            guard let url = URL(string: urlString) else { continue }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 10
+            // кэш не нужен — хотим всегда свежее
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { continue }
+                let text = String(data: data, encoding: .utf8) ?? ""
+                // Валидация: домены по одному в строке, буквы/цифры/точки/дефисы.
+                let domains = text
+                    .split(separator: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty && $0.range(of: "^[a-z0-9][a-z0-9.-]*$", options: .regularExpression, range: $0.startIndex..<$0.endIndex, locale: nil) != nil }
+                guard domains.count >= 3 else { continue } // слишком мало = битый файл
+                let unique = Array(Set(domains))
+                frontBases = unique
+                frontsUpdatedAt = Date()
+                frontsUpdateMessage = "Обновлено: \(unique.count) доменов"
+                return true
+            } catch {
+                continue // следующий URL
+            }
+        }
+        frontsUpdateMessage = "Не удалось обновить (нет сети или источники недоступны)"
+        return false
+    }
+
     private var manager: NETunnelProviderManager?
     private var darwinObserver: CFRunLoopObserver?
     nonisolated(unsafe) private static var currentReader: JournalReader?
@@ -240,6 +301,13 @@ final class TunnelManager: ObservableObject {
 
     func toggle() async {
         errorMessage = nil
+        // Автообновление списка фронтов при каждом включении: тихо, в фоне,
+        // не блокирует старт (применится при следующем включении).
+        // Не чаще раза в 30 минут.
+        let lastUpdate = frontsUpdatedAt?.timeIntervalSinceNow ?? -3600
+        if lastUpdate < -1800 {
+            Task { await updateFronts() }
+        }
         do {
             let m: NETunnelProviderManager
             if let existing = manager {
@@ -260,6 +328,7 @@ final class TunnelManager: ObservableObject {
             let wd = workerDomain.trimmingCharacters(in: .whitespacesAndNewlines)
             var config: [String: NSObject] = [:]
             if !wd.isEmpty { config["worker"] = wd as NSString }
+            if !frontBases.isEmpty { config["fronts"] = frontBases as NSArray }
             if !activeDNSServers.isEmpty {
                 config["dns"] = activeDNSServers as NSArray
                 if let doh = selectedDNS.dohURL {

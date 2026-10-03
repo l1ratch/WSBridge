@@ -3,10 +3,14 @@ import Foundation
 /// Ротационные CF-домены из апстрима tg-ws-proxy (.github/cfproxy-domains.txt).
 /// Декодированы функцией _dd() из config.py (shift cipher).
 /// kws{dc}.{base_domain} фронтирует WS-гейтвей Telegram через Cloudflare.
+///
+/// Список обновляемый: приложение при включении туннеля передаёт свежий
+/// список (providerConfiguration["fronts"]) — фронты апстрима умирают
+/// волнами, пересобирать приложение ради каждого обновления нельзя.
+/// Пустой/битый обновлённый список = откат к встроенному.
 enum CFDomains {
     // Полный встроенный список десктопа (_CFPROXY_ENC из config.py, decode _dd).
-    // Раньше были только первые 5 — каскад не доходил до живых доменов.
-    static let bases = [
+    static let builtinBases = [
         "pclead.co.uk",
         "offshor.co.uk",
         "cakeisalie.co.uk",
@@ -28,6 +32,24 @@ enum CFDomains {
         "stopblocking.co.uk",
         "nothingthere.co.uk",
     ]
+
+    /// Активные базовые домены. Устанавливаются на старте туннеля из
+    /// providerConfiguration["fronts"]; по умолчанию — встроенный список.
+    private static var _bases: [String]?
+    private static let lock = NSLock()
+
+    static var bases: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return _bases ?? builtinBases
+    }
+
+    /// Заменяет список фронтов (вызывается из PacketTunnelProvider.startTunnel).
+    /// Битовый/пустой список игнорируется — остаётся встроенный.
+    static func update(_ newBases: [String]) {
+        lock.lock(); defer { lock.unlock() }
+        guard newBases.count >= 3 else { return }
+        _bases = newBases
+    }
 
     /// Возвращает список доменов для WS-подключения: kws{dc}.{base}
     static func domains(dc: Int) -> [String] {

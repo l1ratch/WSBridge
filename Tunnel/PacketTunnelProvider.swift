@@ -68,6 +68,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             self?.workerDomain = (wd?.isEmpty == false) ? wd : nil
             EventLog.append("cfg:worker=\(self?.workerDomain ?? "-")")
+            // Hot-обновление фронтов: свежий список от приложения (или встроенный).
+            let fronts = proto?.providerConfiguration?["fronts"] as? [String]
+            CFDomains.update(fronts ?? [])
+            EventLog.append("cfg:fronts=\(CFDomains.bases.count)")
             let ver = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
             EventLog.append("tunnel_start v\(ver)")
             self?.journalServer.start()

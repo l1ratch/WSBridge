@@ -189,6 +189,28 @@ struct MenuView: View {
                     } label: {
                         Label("CF Worker", systemImage: "cloud")
                     }
+                    Button {
+                        Task { await tunnel.updateFronts() }
+                    } label: {
+                        HStack {
+                            Label("Обновить список фронтов", systemImage: "arrow.triangle.2.circlepath")
+                            Spacer()
+                            if let msg = tunnel.frontsUpdateMessage {
+                                Text(msg)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    if let updated = tunnel.frontsUpdatedAt {
+                        Text("Список обновлён: \(updated.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("Фронты — входы Cloudflare к серверам Telegram. Апстрим периодически меняет их; обновление подхватится при следующем включении туннеля.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Section("Информация") {
                     NavigationLink {
