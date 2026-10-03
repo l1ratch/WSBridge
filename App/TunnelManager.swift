@@ -301,13 +301,10 @@ final class TunnelManager: ObservableObject {
 
     func toggle() async {
         errorMessage = nil
-        // Автообновление списка фронтов при каждом включении: тихо, в фоне,
-        // не блокирует старт (применится при следующем включении).
-        // Не чаще раза в 30 минут.
-        let lastUpdate = frontsUpdatedAt?.timeIntervalSinceNow ?? -3600
-        if lastUpdate < -1800 {
-            Task { await updateFronts() }
-        }
+        // Автообновление списка фронтов: тихо, в фоне, ПОСЛЕ включения —
+        // не конкурирует с saveToPreferences за UserDefaults и не влияет
+        // на старт. Не чаще раза в 30 минут. Применится при след. включении.
+        let needsFrontsUpdate = (frontsUpdatedAt?.timeIntervalSinceNow ?? -3600) < -1800
         do {
             let m: NETunnelProviderManager
             if let existing = manager {
@@ -355,6 +352,21 @@ final class TunnelManager: ObservableObject {
                 m.connection.stopVPNTunnel()
             default:
                 try m.connection.startVPNTunnel()
+                if needsFrontsUpdate {
+                    Task { await updateFronts() }
+                }
+                // Сторож: если за 20с статус не сдвинулся (расширение умерло
+                // молча) — показываем ошибку и разблокируем кнопку.
+                let startStatus = m.connection.status
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 20_000_000_000)
+                    guard let self, self.status == startStatus,
+                          startStatus == .connecting || startStatus == .asserting else { return }
+                    self.errorMessage = "Туннель не запустился. Попробуй ещё раз."
+                    if let conn = self.manager?.connection {
+                        self.status = conn.status
+                    }
+                }
             }
             status = m.connection.status
         } catch {
