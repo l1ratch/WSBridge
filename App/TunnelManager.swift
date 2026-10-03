@@ -361,7 +361,7 @@ final class TunnelManager: ObservableObject {
                 Task { @MainActor [weak self] in
                     try? await Task.sleep(nanoseconds: 20_000_000_000)
                     guard let self, self.status == startStatus,
-                          startStatus == .connecting || startStatus == .asserting else { return }
+                          startStatus == .connecting || startStatus == .reasserting else { return }
                     self.errorMessage = "Туннель не запустился. Попробуй ещё раз."
                     if let conn = self.manager?.connection {
                         self.status = conn.status
